@@ -20,7 +20,7 @@ POSITIONS = ["top-left", "top-center", "top-right", "middle-left", "middle-cente
 SIZES = ["small", "medium", "large"]
 COLOURS = ["white", "yellow", "red"]
 
-STATIC_TYPES = {".html": "text/html; charset=utf-8", ".ttf": "font/ttf"}
+STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".ttf": "font/ttf"}
 
 TABLE_COLUMNS = """
   id INTEGER PRIMARY KEY AUTOINCREMENT,

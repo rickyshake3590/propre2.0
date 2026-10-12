@@ -398,8 +398,8 @@
   <div class="timer-log-entries" id="log-entries"></div>
 </div>
 
+<script src="js/store.js"></script>
 <script>
-const API = '/api/timers';
 const LOG_KEY = 'propre_timer_log';
 const ORDER_KEY = 'propre_control_order';
 const DRAG_HANDLE = '<svg viewBox="0 0 10 16"><circle cx="2.5" cy="2.5" r="1.5"/><circle cx="7.5" cy="2.5" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13.5" r="1.5"/><circle cx="7.5" cy="13.5" r="1.5"/></svg>';
@@ -511,8 +511,7 @@ document.getElementById('clear-log-btn').addEventListener('click', () => { saveL
 
 // ---------- API ----------
 async function fetchTimers() {
-  const res = await fetch(API);
-  timers = await res.json();
+  timers = await Store.listTimers();
   applySavedOrder();
   timers.forEach(t => {
     if (!runtime[t.id]) runtime[t.id] = { isRunning: false, isPaused: false, elapsedBase: 0, startedAt: 0 };
@@ -520,16 +519,12 @@ async function fetchTimers() {
   renderAll();
 }
 
-async function createTimer(payload) {
-  const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to create timer');
-  return data;
+function createTimer(payload) {
+  return Store.createTimer(payload);
 }
 
-async function deleteTimer(id) {
-  const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
-  if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Failed to delete timer'); }
+function deleteTimer(id) {
+  return Store.deleteTimer(id);
 }
 
 // ---------- Timer scene (shared by form preview, preview grid and live box) ----------
@@ -791,14 +786,10 @@ function getShownTimer() {
 
 function pushLive() {
   const shown = getShownTimer();
-  fetch('/api/live', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      timer: shown,
-      elapsed: shown ? getElapsed(shown.id) : 0,
-      isRunning: shown ? !!runtime[shown.id].isRunning : false
-    })
+  Store.setLive({
+    timer: shown,
+    elapsed: shown ? getElapsed(shown.id) : 0,
+    isRunning: shown ? !!runtime[shown.id].isRunning : false
   }).catch(() => {});
 }
 
