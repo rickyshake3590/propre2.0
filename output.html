@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProPre2.0 — Output</title>
+<style>
+  @font-face {
+    font-family: 'Big Noodle Titling';
+    src: url('fonts/big_noodle_titling.ttf') format('truetype');
+    font-display: swap;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #000;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .scene {
+    width: 100%;
+    height: 100%;
+    container-type: size;
+    background: #000;
+    border: none;
+    border-radius: 0;
+    overflow: hidden;
+    font-family: 'Big Noodle Titling', monospace;
+  }
+  .scene-inner { height: 100%; padding: 3cqh 4cqh; display: flex; flex-direction: column; }
+  .scene-clock { line-height: 0.85; white-space: nowrap; color: #8a8a8a; margin-top: 1cqh; font-variant-numeric: tabular-nums; }
+  .scene-value { line-height: 0.85; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scene.size-small .scene-value { font-size: 24cqh; }
+  .scene.size-medium .scene-value { font-size: 52cqh; }
+  .scene.size-large .scene-value { font-size: 72cqh; }
+  .scene.size-small .scene-clock { font-size: 11cqh; }
+  .scene.size-medium .scene-clock { font-size: 16cqh; }
+  .scene.size-large .scene-clock { font-size: 20cqh; }
+</style>
+</head>
+<body>
+
+<div class="scene size-large" id="scene">
+  <div class="scene-inner" id="scene-inner"></div>
+</div>
+
+<script>
+const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#e04b4b' };
+
+let live = null;
+let fetchedAt = 0;
+
+function formatTime(totalSeconds) {
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function nowHHMM() {
+  return new Date().toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit' });
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/api/live');
+    live = await res.json();
+    fetchedAt = performance.now();
+  } catch (e) {}
+}
+
+function render() {
+  const scene = document.getElementById('scene');
+  const inner = document.getElementById('scene-inner');
+
+  if (!live || !live.timer) {
+    inner.innerHTML = '';
+  } else {
+    const t = live.timer;
+    const elapsed = live.elapsed + (live.isRunning ? (performance.now() - fetchedAt) / 1000 : 0);
+    const value = t.type === 'countup' ? elapsed : Math.max(0, t.duration_seconds - elapsed);
+
+    const alignV = t.position.startsWith('top') ? 'flex-start' : (t.position.startsWith('bottom') ? 'flex-end' : 'center');
+    const alignH = t.position.endsWith('left') ? 'flex-start' : (t.position.endsWith('right') ? 'flex-end' : 'center');
+    const textAlign = alignH === 'flex-start' ? 'left' : (alignH === 'flex-end' ? 'right' : 'center');
+
+    scene.className = `scene size-${t.size}`;
+    inner.style.justifyContent = alignV;
+    inner.style.alignItems = alignH;
+    inner.style.textAlign = textAlign;
+    inner.innerHTML = `
+      <div class="scene-value" style="color:${COLOUR_MAP[t.colour] || '#eaeaea'}">${formatTime(value)}</div>
+      ${t.show_current_time ? `<div class="scene-clock">${nowHHMM()}</div>` : ''}`;
+  }
+  requestAnimationFrame(render);
+}
+
+poll();
+setInterval(poll, 250);
+requestAnimationFrame(render);
+
+document.addEventListener('click', () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+});
+</script>
+
+</body>
+</html>

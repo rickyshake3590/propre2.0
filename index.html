@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProPre2.0 — Timer Dashboard</title>
+<style>
+  @font-face {
+    font-family: 'Big Noodle Titling';
+    src: url('fonts/big_noodle_titling.ttf') format('truetype');
+    font-display: swap;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --panel: #131313;
+    --panel-border: #262626;
+    --card-bg: #1b1b1b;
+    --card-border: #333;
+    --text: #eaeaea;
+    --text-dim: #8a8a8a;
+    --accent: #FFD700;
+    --select-orange: #FF8C00;
+    --run-green: #4ADE80;
+    --run-yellow: #FDE047;
+    --run-red: #F87171;
+    --run-text-dark: #14231a;
+    font-family: 'Big Noodle Tilting', 'Righteous', 'Arial Narrow', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 22px; letter-spacing: 2px; color: var(--accent); }
+  header span { font-size: 12px; color: var(--text-dim); letter-spacing: 1px; }
+
+  .app-layout {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr 360px;
+    min-height: 0;
+  }
+
+  @media (max-width: 1000px) {
+    .app-layout { grid-template-columns: 1fr; }
+    .left-panel, .middle-panel, .right-panel { border-right: none !important; border-bottom: 1px solid var(--panel-border); }
+  }
+
+  .panel-title {
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  /* ===== LEFT PANEL — Create Timer ===== */
+  .left-panel {
+    background: var(--panel);
+    border-right: 1px solid var(--panel-border);
+    padding: 18px;
+    overflow-y: auto;
+  }
+
+  .create-form {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 14px;
+  }
+
+  .field { margin-bottom: 10px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .field input, .field select {
+    width: 100%;
+    background: #0d0d0d;
+    border: 1px solid var(--card-border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .field.is-disabled label, .field.is-disabled input { opacity: 0.35; cursor: not-allowed; }
+  .field.is-disabled input { background: #111; }
+
+  .btn {
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    padding: 9px 14px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    font-family: inherit;
+    text-transform: uppercase;
+  }
+  .btn-primary { background: var(--accent); color: #0a0a0a; font-weight: bold; width: 100%; margin-top: 4px; }
+  .btn-primary:hover { background: #ffe14d; }
+  .btn-secondary { background: #2a2a2a; color: var(--text); }
+  .btn-secondary:hover { background: #383838; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .form-error { color: #e07070; font-size: 12px; margin-top: 6px; display: none; }
+
+  /* ===== MIDDLE PANEL — Template Grid (ProPresenter-style) ===== */
+  .middle-panel {
+    background: #0d0d0d;
+    border-right: 1px solid var(--panel-border);
+    padding: 18px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .middle-panel { container-type: inline-size; }
+  #preview-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    align-content: start;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    padding: 4px;
+    /* 4 rows x card height, plus 12px gaps and 4px padding top/bottom */
+    max-height: calc(4 * ((((100cqw - 32px) / 3) - 4px) * 9 / 16 + 28px) + 3 * 12px + 8px);
+  }
+  @media (max-width: 700px) {
+    #preview-list { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .empty-state { color: var(--text-dim); font-size: 13px; text-align: center; padding: 40px 0; grid-column: 1 / -1; }
+
+  /* ===== Timer scene — one component used by the form preview, the preview grid and the live box.
+     All text is sized in container-query units so it keeps its ratio to the box at any size. ===== */
+  .scene {
+    width: 100%;
+    aspect-ratio: 16 / 9; /* same shape as the ProPresenter slide, so text:box ratios match the reference */
+    container-type: size;
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: 'Big Noodle Titling', monospace;
+  }
+  .scene-inner { height: 100%; padding: 3cqh 4cqh; display: flex; flex-direction: column; }
+  .scene-name, .scene-clock { line-height: 0.85; white-space: nowrap; }
+  .scene-name { color: #fff; margin-bottom: 1cqh; }
+  .scene-clock { color: var(--text-dim); margin-top: 1cqh; font-variant-numeric: tabular-nums; }
+  .scene-value { line-height: 0.85; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scene.size-small .scene-value { font-size: 24cqh; }
+  .scene.size-medium .scene-value { font-size: 52cqh; }
+  .scene.size-large .scene-value { font-size: 72cqh; }
+  .scene.size-small .scene-name, .scene.size-small .scene-clock { font-size: 11cqh; }
+  .scene.size-medium .scene-name, .scene.size-medium .scene-clock { font-size: 16cqh; }
+  .scene.size-large .scene-name, .scene.size-large .scene-clock { font-size: 20cqh; }
+
+  .preview-card {
+    cursor: pointer;
+    border: 2px solid var(--card-border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #3a3a3a;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .preview-card {
+    display: flex;
+    flex-direction: column;
+    height: calc((((100cqw - 32px) / 3) - 4px) * 9 / 16 + 28px);
+  }
+  .preview-card .scene { border: 0; border-radius: 0; aspect-ratio: auto; flex: 1 1 auto; min-height: 0; }
+  /* Grey strip under the timer box with the timer name at the bottom right (ProPresenter-style) */
+  .preview-footer {
+    background: #4a4a4a;
+    color: #fff;
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 12px;
+    line-height: 1;
+    text-align: right;
+    padding: 6px 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .preview-card:hover { border-color: #555; }
+  .preview-card.selected { border-color: var(--select-orange); box-shadow: 0 0 0 3px rgba(255,140,0,0.22); }
+  /* Running: whole outline turns green (overrides the orange selection outline) until paused/ended */
+  .preview-card.running, .preview-card.running.selected { border-color: var(--run-green); }
+  .preview-card.running.selected { box-shadow: 0 0 0 3px rgba(74,222,128,0.22); }
+
+  /* ===== RIGHT PANEL — Live + Controls ===== */
+  .right-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+  .live-output-box {
+    position: relative;
+    flex-shrink: 0;
+    background: #000;
+    border-bottom: 2px solid var(--accent);
+    padding: 16px;
+  }
+  .live-output-box .live-placeholder { color: var(--text-dim); font-size: 16px; text-align: center; padding: 60px 0; }
+
+  .control-list { flex: 1; overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .control-list .panel-title { padding: 0 0 2px 0; }
+  #control-rows { overflow-y: auto; scrollbar-gutter: stable; padding: 4px; }
+
+  .control-row {
+    --bar: transparent;
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    border-left: 5px solid var(--bar);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    transition: border-color 0.15s;
+  }
+  .control-row.selected { border-color: var(--select-orange); box-shadow: 0 0 0 3px rgba(255,140,0,0.22); }
+  /* Running: whole outline turns green (overrides the orange selection outline) until paused/ended */
+  .control-row.running, .control-row.running.selected { border-color: var(--run-green); }
+  .control-row.running.selected { box-shadow: 0 0 0 3px rgba(74,222,128,0.22); }
+
+  .control-row .row-info { flex: 1; min-width: 0; cursor: pointer; }
+  .drag-handle { flex-shrink: 0; align-self: center; width: 12px; color: #5a5a5a; cursor: grab; display: flex; justify-content: center; }
+  .drag-handle:hover { color: var(--text); }
+  .drag-handle:active { cursor: grabbing; }
+  .drag-handle svg { width: 10px; height: 16px; fill: currentColor; }
+  .control-row.dragging { opacity: 0.4; }
+  .control-row.drop-target { outline: 2px dashed var(--accent); outline-offset: 3px; }
+  .control-row .row-name { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .control-row .row-state { font-size: 13px; color: var(--text-dim); }
+  .control-row.running .row-state { color: var(--run-green); }
+  .control-row.running.warn .row-state { color: var(--run-yellow); }
+  .control-row.running.crit .row-state { color: var(--run-red); }
+  .control-row .row-time { font-size: 26px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .control-row .row-stats { display: flex; gap: 14px; margin-top: 6px; font-size: 10px; color: var(--text-dim); }
+  .control-row .row-stats b { display: block; font-weight: normal; color: #6d6d6d; font-variant-numeric: tabular-nums; }
+
+  .row-icons { display: flex; gap: 4px; flex-shrink: 0; }
+  .icon-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    background: #2a2a2a; border: none; border-radius: 50%; color: var(--text);
+    cursor: pointer;
+  }
+  .icon-btn:hover { background: #3a3a3a; }
+  .icon-btn.icon-danger { color: #e07070; }
+  .icon-btn.icon-danger:hover { background: #4a1c1c; }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  /* ===== TIMER LOG (full width, bottom) ===== */
+  .timer-log {
+    flex-shrink: 0;
+    border-top: 1px solid var(--panel-border);
+    background: var(--panel);
+    max-height: 200px;
+    display: flex;
+    flex-direction: column;
+  }
+  .timer-log-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--panel-border);
+  }
+  .timer-log-header .panel-title { margin-bottom: 0; }
+  .timer-log-entries { overflow-y: auto; padding: 8px 24px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .timer-log-entries .log-entry { color: var(--text-dim); }
+  .timer-log-entries .log-entry .log-time { color: var(--accent); margin-right: 6px; }
+  .timer-log-entries .log-entry .log-name { color: var(--text); font-weight: bold; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PROPRE2.0</h1>
+  <span>TIMER DASHBOARD</span>
+</header>
+
+<div class="app-layout">
+
+  <!-- LEFT COLUMN — Create Timer -->
+  <div class="left-panel">
+    <div class="panel-title">Create Timer</div>
+    <form class="create-form" id="create-form">
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="f-name" maxlength="40" required>
+      </div>
+      <div class="field">
+        <label>Duration (MM:SS)</label>
+        <input type="text" id="f-duration" placeholder="MM:SS" inputmode="numeric" pattern="\d{1,3}:[0-5]\d" maxlength="6" required>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select id="f-type">
+          <option value="countdown">Countdown</option>
+          <option value="countup">Countup</option>
+          <option value="altar-call">Altar Call</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Position</label>
+        <select id="f-position">
+          <option value="top-left">Top Left</option>
+          <option value="top-center">Top Center</option>
+          <option value="top-right">Top Right</option>
+          <option value="middle-left">Middle Left</option>
+          <option value="middle-center" selected>Middle Center</option>
+          <option value="middle-right">Middle Right</option>
+          <option value="bottom-left">Bottom Left</option>
+          <option value="bottom-center">Bottom Center</option>
+          <option value="bottom-right">Bottom Right</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Size</label>
+        <select id="f-size">
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large" selected>Large</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Colour</label>
+        <select id="f-colour">
+          <option value="white" selected>White</option>
+          <option value="yellow">Yellow</option>
+          <option value="red">Red</option>
+        </select>
+      </div>
+      <div class="field" style="display:flex; align-items:center; gap:8px; flex-direction:row;">
+        <input type="checkbox" id="f-show-title" checked style="width:auto;">
+        <label style="margin:0;">Show timer name</label>
+      </div>
+      <div class="field" style="display:flex; align-items:center; gap:8px; flex-direction:row;">
+        <input type="checkbox" id="f-show-current-time" style="width:auto;">
+        <label style="margin:0;">Show current time</label>
+      </div>
+      <div class="form-error" id="create-error"></div>
+      <div id="form-preview" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; padding: 12px; margin-bottom: 10px; display: none;"></div>
+      <button type="submit" class="btn btn-primary">+ Create</button>
+    </form>
+  </div>
+
+  <!-- MIDDLE COLUMN — Previews only -->
+  <div class="middle-panel">
+    <div class="panel-title">Timer Previews</div>
+    <div id="preview-list">
+      <div class="empty-state">No timers created yet.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN — Live + Controls -->
+  <div class="right-panel">
+    <div class="live-output-box" id="live-output-box">
+      <div class="live-placeholder" id="live-placeholder">Select or start a timer</div>
+      <div id="live-content" style="display:none;"></div>
+    </div>
+
+    <div class="control-list">
+      <div class="panel-title">Timer Controls</div>
+      <div id="control-rows">
+        <div class="empty-state">No timers yet.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TIMER LOG — full width footer -->
+<div class="timer-log">
+  <div class="timer-log-header">
+    <div class="panel-title">Timer Log</div>
+    <button class="btn btn-secondary" id="clear-log-btn" style="padding:5px 10px; font-size:11px;">Clear</button>
+  </div>
+  <div class="timer-log-entries" id="log-entries"></div>
+</div>
+
+<script>
+const API = '/api/timers';
+const LOG_KEY = 'propre_timer_log';
+const ORDER_KEY = 'propre_control_order';
+const DRAG_HANDLE = '<svg viewBox="0 0 10 16"><circle cx="2.5" cy="2.5" r="1.5"/><circle cx="7.5" cy="2.5" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13.5" r="1.5"/><circle cx="7.5" cy="13.5" r="1.5"/></svg>';
+const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#e04b4b' };
+const POSITION_LABELS = {
+  'top-left': 'Top Left', 'top-center': 'Top Center', 'top-right': 'Top Right',
+  'middle-left': 'Middle Left', 'middle-center': 'Middle Center', 'middle-right': 'Middle Right',
+  'bottom-left': 'Bottom Left', 'bottom-center': 'Bottom Center', 'bottom-right': 'Bottom Right'
+};
+
+const ICONS = {
+  play: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M6 4l10 6-10 6V4z"/></svg>',
+  pause: '<svg viewBox="0 0 20 20" fill="currentColor"><rect x="5" y="4" width="4" height="12"/><rect x="11" y="4" width="4" height="12"/></svg>',
+  stop: '<svg viewBox="0 0 20 20" fill="currentColor"><rect x="5" y="5" width="10" height="10"/></svg>',
+  restart: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6A6 6 0 1 0 16 11"/><path d="M16 3v4h-4"/></svg>',
+  trash: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M8 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M6 6l1 11a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-11"/></svg>',
+  clock: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l3 2"/></svg>'
+};
+
+const TYPE_LABELS = { countdown: 'Countdown', countup: 'Countup', 'altar-call': 'Altar Call' };
+const typeLabel = t => TYPE_LABELS[t.type] || 'Countdown';
+const isCountdown = t => t.type !== 'countup'; // altar call counts down
+
+let timers = [];
+let runtime = {};
+let selectedId = null;
+
+// ---------- Utility ----------
+function formatTime(totalSeconds) {
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function nowHHMMSS() {
+  return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function nowHHMM() {
+  return new Date().toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit' });
+}
+
+function getElapsed(id) {
+  const r = runtime[id];
+  if (!r) return 0;
+  if (r.isRunning) return r.elapsedBase + (performance.now() - r.startedAt) / 1000;
+  return r.elapsedBase;
+}
+
+function getDisplayValue(timer) {
+  const elapsed = getElapsed(timer.id);
+  if (isCountdown(timer)) return Math.max(0, timer.duration_seconds - elapsed);
+  return elapsed;
+}
+
+function getState(timer) {
+  const r = runtime[timer.id];
+  if (!r) return 'stopped';
+  return r.isRunning ? 'running' : (r.isPaused ? 'paused' : 'stopped');
+}
+
+// Fixed-cutoff colour: >50% remaining = green, 20-50% = yellow, <20% = red.
+// Countup timers while running are always green (no "approaching zero" signal).
+function getRunColour(timer) {
+  const r = runtime[timer.id];
+  if (!r || !r.isRunning) return null;
+  if (timer.type === 'countup') return 'green';
+  const remainingFraction = Math.max(0, timer.duration_seconds - getElapsed(timer.id)) / timer.duration_seconds;
+  if (remainingFraction > 0.5) return 'green';
+  if (remainingFraction > 0.2) return 'yellow';
+  return 'red';
+}
+
+function applyRunColour(el, colour) {
+  el.classList.toggle('running', !!colour);
+  el.classList.toggle('warn', colour === 'yellow');
+  el.classList.toggle('crit', colour === 'red');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
+// ---------- Log ----------
+function loadLog() {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch (e) { return []; }
+}
+function saveLog(entries) { localStorage.setItem(LOG_KEY, JSON.stringify(entries)); }
+function addLog(name, action, extra) {
+  const entries = loadLog();
+  entries.unshift({ time: nowHHMMSS(), name, action, extra: extra || '' });
+  saveLog(entries.slice(0, 200));
+  renderLog();
+}
+function renderLog() {
+  const el = document.getElementById('log-entries');
+  const entries = loadLog();
+  if (entries.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:12px 0;">No log entries yet</div>';
+    return;
+  }
+  el.innerHTML = entries.map(e =>
+    `<div class="log-entry"><span class="log-time">[${e.time}]</span><span class="log-name">${escapeHtml(e.name)}</span> — ${escapeHtml(e.action)}${e.extra ? ' (' + escapeHtml(e.extra) + ')' : ''}</div>`
+  ).join('');
+}
+document.getElementById('clear-log-btn').addEventListener('click', () => { saveLog([]); renderLog(); });
+
+// ---------- API ----------
+async function fetchTimers() {
+  const res = await fetch(API);
+  timers = await res.json();
+  applySavedOrder();
+  timers.forEach(t => {
+    if (!runtime[t.id]) runtime[t.id] = { isRunning: false, isPaused: false, elapsedBase: 0, startedAt: 0 };
+  });
+  renderAll();
+}
+
+async function createTimer(payload) {
+  const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to create timer');
+  return data;
+}
+
+async function deleteTimer(id) {
+  const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+  if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Failed to delete timer'); }
+}
+
+// ---------- Timer scene (shared by form preview, preview grid and live box) ----------
+function sceneHTML({ name, value, colour, size, position, showTime, extraClass = '', attrs = '', nameColour = '#fff' }) {
+  const alignV = position.startsWith('top') ? 'flex-start' : (position.startsWith('bottom') ? 'flex-end' : 'center');
+  const alignH = position.endsWith('left') ? 'flex-start' : (position.endsWith('right') ? 'flex-end' : 'center');
+  const textAlign = alignH === 'flex-start' ? 'left' : (alignH === 'flex-end' ? 'right' : 'center');
+  return `
+    <div class="scene size-${size} ${extraClass}" ${attrs}>
+      <div class="scene-inner" style="justify-content:${alignV}; align-items:${alignH}; text-align:${textAlign};">
+        ${name ? `<div class="scene-name" style="color:${nameColour}">${escapeHtml(name)}</div>` : ''}
+        <div class="scene-value" style="color:${COLOUR_MAP[colour] || '#eaeaea'}">${value}</div>
+        ${showTime ? `<div class="scene-clock">${nowHHMM()}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+// ---------- Create form ----------
+// Parses "MM:SS" into seconds; returns NaN if the format is invalid.
+function parseDuration(str) {
+  const m = /^(\d{1,3}):([0-5]\d)$/.exec(str.trim());
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NaN;
+}
+
+// Altar Call names are always yellow; every other type keeps white names
+function nameColourFor(type) {
+  return type === 'altar-call' ? COLOUR_MAP.yellow : '#fff';
+}
+
+// Countup timers have no duration, so the field is disabled and not required
+function updateDurationField() {
+  const isCountup = document.getElementById('f-type').value === 'countup';
+  const input = document.getElementById('f-duration');
+  input.disabled = isCountup;
+  input.required = !isCountup;
+  input.closest('.field').classList.toggle('is-disabled', isCountup);
+  if (isCountup) input.value = '';
+}
+
+// ---------- Form preview & Show Current Time logic ----------
+
+function updateFormPreview() {
+  const name = document.getElementById('f-name').value.trim() || 'Timer Name';
+  const duration = parseDuration(document.getElementById('f-duration').value) || 0;
+  const showCurrentTime = document.getElementById('f-show-current-time').checked;
+  const showTitle = document.getElementById('f-show-title').checked;
+  const size = document.getElementById('f-size').value;
+  const colour = document.getElementById('f-colour').value;
+  const position = document.getElementById('f-position').value;
+
+  const previewEl = document.getElementById('form-preview');
+
+  if (!name.trim() && duration === 0) {
+    previewEl.style.display = 'none';
+    return;
+  }
+
+  previewEl.style.display = 'block';
+  previewEl.innerHTML = sceneHTML({
+    name: showTitle && name !== 'Timer Name' ? name : '',
+    value: formatTime(duration), colour, size, position, showTime: showCurrentTime,
+    nameColour: nameColourFor(document.getElementById('f-type').value)
+  });
+}
+
+document.getElementById('f-name').addEventListener('input', updateFormPreview);
+document.getElementById('f-duration').addEventListener('input', updateFormPreview);
+document.getElementById('f-size').addEventListener('change', updateFormPreview);
+let priorColour = 'white';
+let typeColourForced = false;
+let priorName = '';
+let priorPosition = 'middle-center';
+let priorSize = 'large';
+let typeAltarForced = false;
+document.getElementById('f-type').addEventListener('change', () => {
+  const colourSel = document.getElementById('f-colour');
+  const nameEl = document.getElementById('f-name');
+  const posSel = document.getElementById('f-position');
+  const sizeSel = document.getElementById('f-size');
+  const type = document.getElementById('f-type').value;
+
+  // Countup and Altar Call both force a colour; only Altar Call also forces name/position/size.
+  const forcedColour = { countup: 'red', 'altar-call': 'yellow' }[type];
+  if (forcedColour) {
+    if (!typeColourForced) priorColour = colourSel.value;
+    colourSel.value = forcedColour;
+  } else {
+    colourSel.value = priorColour;
+  }
+  typeColourForced = !!forcedColour;
+
+  if (type === 'altar-call') {
+    if (!typeAltarForced) {
+      priorName = nameEl.value;
+      priorPosition = posSel.value;
+      priorSize = sizeSel.value;
+    }
+    nameEl.value = 'Altar Call';
+    posSel.value = 'middle-center';
+    sizeSel.value = 'large';
+    typeAltarForced = true;
+  } else if (typeAltarForced) {
+    nameEl.value = priorName;
+    posSel.value = priorPosition;
+    sizeSel.value = priorSize;
+    typeAltarForced = false;
+  }
+
+  updateDurationField();
+  updateFormPreview();
+});
+document.getElementById('f-colour').addEventListener('change', updateFormPreview);
+document.getElementById('f-show-title').addEventListener('change', updateFormPreview);
+document.getElementById('f-show-current-time').addEventListener('change', updateFormPreview);
+document.getElementById('f-position').addEventListener('change', updateFormPreview);
+
+document.getElementById('create-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('create-error');
+  errorEl.style.display = 'none';
+
+  const payload = {
+    name: document.getElementById('f-name').value.trim(),
+    duration_seconds: document.getElementById('f-type').value === 'countup' ? 0 : parseDuration(document.getElementById('f-duration').value),
+    type: document.getElementById('f-type').value,
+    position: document.getElementById('f-position').value,
+    size: document.getElementById('f-size').value,
+    colour: document.getElementById('f-colour').value,
+    show_title: document.getElementById('f-show-title').checked,
+    show_current_time: document.getElementById('f-show-current-time').checked
+  };
+
+  if (!payload.name) { errorEl.textContent = 'Timer name is required.'; errorEl.style.display = 'block'; return; }
+  if (payload.type !== 'countup' && (!Number.isFinite(payload.duration_seconds) || payload.duration_seconds < 1)) {
+    errorEl.textContent = 'Enter a duration as MM:SS (at least 00:01).'; errorEl.style.display = 'block'; return;
+  }
+
+  try {
+    const created = await createTimer(payload);
+    runtime[created.id] = { isRunning: false, isPaused: false, elapsedBase: 0, startedAt: 0 };
+    timers.push(created);
+    addLog(created.name, 'CREATED', created.type === 'countup' ? '' : `Duration: ${created.duration_seconds}s`);
+    document.getElementById('create-form').reset();
+    updateDurationField();
+    document.getElementById('f-size').value = 'large';
+    document.getElementById('f-colour').value = 'white';
+    document.getElementById('f-show-title').checked = true;
+    priorColour = 'white';
+    typeColourForced = false;
+    priorName = '';
+    priorPosition = 'middle-center';
+    priorSize = 'large';
+    typeAltarForced = false;
+    updateFormPreview();
+    renderAll();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
+
+// ---------- Selection ----------
+function selectTimer(id) {
+  selectedId = id;
+  // Countup timers autostart the first time they are opened
+  const t = timers.find(tm => tm.id === id);
+  const r = runtime[id];
+  if (t && r && t.type === 'countup' && !r.isRunning && !r.isPaused && r.elapsedBase === 0) {
+    startTimer(id);
+    return;
+  }
+  renderAll();
+}
+
+// ---------- Timer controls ----------
+function playPauseToggle(id) {
+  const r = runtime[id];
+  if (r.isRunning) pauseTimer(id); else startTimer(id);
+}
+
+function startTimer(id) {
+  const timer = timers.find(t => t.id === id);
+  const r = runtime[id];
+  const wasPaused = r.isPaused;
+  r.isRunning = true;
+  r.isPaused = false;
+  r.startedAt = performance.now();
+  if (!wasPaused) r.startedClock = nowHHMM();
+  addLog(timer.name, wasPaused ? 'RESUMED' : 'STARTED', typeLabel(timer));
+  renderAll();
+}
+
+function pauseTimer(id) {
+  const timer = timers.find(t => t.id === id);
+  const r = runtime[id];
+  r.elapsedBase = getElapsed(id);
+  r.isRunning = false;
+  r.isPaused = true;
+  addLog(timer.name, 'PAUSED', typeLabel(timer));
+  renderAll();
+}
+
+function stopTimer(id) {
+  const timer = timers.find(t => t.id === id);
+  const r = runtime[id];
+  r.isRunning = false;
+  r.isPaused = false;
+  r.elapsedBase = 0;
+  r.startedClock = null;
+  addLog(timer.name, 'ENDED', typeLabel(timer));
+  renderAll();
+}
+
+// Resets to the original value without starting; the user presses play to start.
+function restartTimer(id) {
+  const timer = timers.find(t => t.id === id);
+  if (!timer || !confirm(`Reset timer "${timer.name}"?`)) return;
+  const r = runtime[id];
+  r.elapsedBase = 0;
+  r.startedClock = null;
+  r.isRunning = false;
+  r.isPaused = false;
+  addLog(timer.name, 'RESET', typeLabel(timer));
+  renderAll();
+}
+
+async function removeTimer(id) {
+  const timer = timers.find(t => t.id === id);
+  if (!timer) return;
+  if (!confirm(`Delete timer "${timer.name}"?`)) return;
+  try {
+    await deleteTimer(id);
+    timers = timers.filter(t => t.id !== id);
+    delete runtime[id];
+    if (selectedId === id) selectedId = null;
+    addLog(timer.name, 'DELETED');
+    renderAll();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// ---------- Rendering ----------
+function renderAll() {
+  renderPreviews();
+  renderControlRows();
+  renderLiveBox();
+  pushLive();
+}
+
+// The timer shown in the live box is also what output.html displays
+function getShownTimer() {
+  let shown = null;
+  if (selectedId !== null) shown = timers.find(t => t.id === selectedId) || null;
+  if (!shown) shown = timers.find(t => runtime[t.id] && runtime[t.id].isRunning) || null;
+  if (!shown) shown = timers.find(t => runtime[t.id] && (runtime[t.id].isPaused || runtime[t.id].elapsedBase > 0)) || null;
+  return shown;
+}
+
+function pushLive() {
+  const shown = getShownTimer();
+  fetch('/api/live', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      timer: shown,
+      elapsed: shown ? getElapsed(shown.id) : 0,
+      isRunning: shown ? !!runtime[shown.id].isRunning : false
+    })
+  }).catch(() => {});
+}
+
+function renderPreviews() {
+  const el = document.getElementById('preview-list');
+  const scroll = el.scrollTop;
+  const order = Object.keys(POSITION_LABELS);
+  const sorted = [...timers].sort((a, b) => order.indexOf(a.position) - order.indexOf(b.position));
+  if (sorted.length === 0) { el.innerHTML = '<div class="empty-state">No timers created yet.</div>'; return; }
+  el.innerHTML = sorted.map(t => `
+    <div class="preview-card ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}" onclick="selectTimer(${t.id})">
+      ${sceneHTML({
+        name: '',
+        value: formatTime(getDisplayValue(t)),
+        colour: t.colour, size: t.size, position: t.position, showTime: !!t.show_current_time
+      })}
+      <div class="preview-footer" style="color:${nameColourFor(t.type)}">${escapeHtml(t.name)}</div>
+    </div>`).join('');
+  timers.forEach(t => {
+    const card = el.querySelector(`.preview-card[data-id="${t.id}"]`);
+    if (card) applyRunColour(card, getRunColour(t));
+  });
+  el.scrollTop = scroll;
+}
+
+
+function fmtDur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const m = Math.floor(sec / 60), r = sec % 60;
+  return m ? `${m}m ${String(r).padStart(2, '0')}s` : `${r}s`;
+}
+
+// Stats shown under each control row (updated every frame by tick())
+function rowStats(t) {
+  const r = runtime[t.id];
+  const elapsed = getElapsed(t.id);
+  const started = r && r.startedClock ? r.startedClock : '--:--';
+  const progress = Math.min(100, Math.round(elapsed / t.duration_seconds * 100));
+  if (isCountdown(t)) {
+    return [['Set', fmtDur(t.duration_seconds)], ['Progress', progress + '%'], ['Elapsed', fmtDur(elapsed)]];
+  }
+  return [['Started', started], ['Elapsed', fmtDur(elapsed)]];
+}
+
+function rowStatsHTML(t) {
+  return rowStats(t).map(([k, v]) => `<div>${k}:<b>${v}</b></div>`).join('');
+}
+
+function renderControlRows() {
+  const el = document.getElementById('control-rows');
+  const scroll = el.scrollTop;
+  if (timers.length === 0) { el.innerHTML = '<div class="empty-state">No timers yet.</div>'; el.style.maxHeight = ''; return; }
+  el.innerHTML = timers.map(t => {
+    const r = runtime[t.id];
+    const state = getState(t);
+    const mainBtn = r.isRunning
+      ? `<button class="icon-btn" title="Pause" onclick="pauseTimer(${t.id})">${ICONS.pause}</button>`
+      : `<button class="icon-btn" title="${r.isPaused ? 'Resume' : 'Start'}" onclick="startTimer(${t.id})">${ICONS.play}</button>`;
+    return `
+      <div class="control-row ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}">
+        <div class="drag-handle" title="Drag to reorder">${DRAG_HANDLE}</div>
+        <div class="row-info" onclick="selectTimer(${t.id})">
+          <div class="row-name" style="color:${nameColourFor(t.type)}">${escapeHtml(t.name)}</div>
+          <div class="row-state">${typeLabel(t)} · ${state.charAt(0).toUpperCase() + state.slice(1)}</div>
+          <div class="row-time" style="color:${COLOUR_MAP[t.colour] || '#eaeaea'}">${formatTime(getDisplayValue(t))}</div>
+          <div class="row-stats">${rowStatsHTML(t)}</div>
+        </div>
+        <div class="row-icons">
+          ${mainBtn}
+          <button class="icon-btn" title="Restart" onclick="restartTimer(${t.id})">${ICONS.restart}</button>
+          <button class="icon-btn icon-danger" title="Delete" onclick="removeTimer(${t.id})">${ICONS.trash}</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+  timers.forEach(t => {
+    const row = el.querySelector(`.control-row[data-id="${t.id}"]`);
+    if (row) applyRunColour(row, getRunColour(t));
+  });
+  bindRowDrag(el);
+  limitVisibleRows();
+  el.scrollTop = scroll;
+}
+
+// Shows at most 4 control rows; the rest are reached by scrolling the list
+const VISIBLE_CONTROL_ROWS = 4;
+function limitVisibleRows() {
+  const el = document.getElementById('control-rows');
+  const rows = el.querySelectorAll('.control-row');
+  if (rows.length <= VISIBLE_CONTROL_ROWS) { el.style.maxHeight = ''; return; }
+  const last = rows[VISIBLE_CONTROL_ROWS - 1];
+  const bottom = last.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop;
+  el.style.maxHeight = (bottom + 4) + 'px';
+}
+
+// ---------- Control row reordering ----------
+let dragId = null;
+
+function bindRowDrag(el) {
+  el.querySelectorAll('.control-row').forEach(row => {
+    const handle = row.querySelector('.drag-handle');
+    handle.addEventListener('mousedown', () => { row.draggable = true; });
+    row.addEventListener('dragstart', e => {
+      dragId = Number(row.dataset.id);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(dragId));
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragend', () => {
+      dragId = null;
+      row.draggable = false;
+      clearDropTargets();
+    });
+    row.addEventListener('dragover', e => {
+      if (dragId === null) return;
+      e.preventDefault();
+      clearDropTargets();
+      row.classList.add('drop-target');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+    row.addEventListener('drop', e => {
+      if (dragId === null) return;
+      e.preventDefault();
+      moveTimer(dragId, Number(row.dataset.id));
+    });
+  });
+}
+
+// A press that never turns into a drag should leave the row non-draggable so text stays selectable
+document.addEventListener('mouseup', () => {
+  if (dragId === null) document.querySelectorAll('.control-row[draggable="true"]').forEach(r => { r.draggable = false; });
+});
+
+function clearDropTargets() {
+  document.querySelectorAll('.control-row.drop-target').forEach(r => r.classList.remove('drop-target'));
+}
+
+function moveTimer(fromId, toId) {
+  const from = timers.findIndex(t => t.id === fromId);
+  const to = timers.findIndex(t => t.id === toId);
+  if (from < 0 || to < 0 || from === to) { dragId = null; return renderControlRows(); }
+  const [moved] = timers.splice(from, 1);
+  timers.splice(to, 0, moved);
+  dragId = null;
+  localStorage.setItem(ORDER_KEY, JSON.stringify(timers.map(t => t.id)));
+  renderAll();
+}
+
+function applySavedOrder() {
+  let order = [];
+  try { order = JSON.parse(localStorage.getItem(ORDER_KEY)) || []; } catch (e) {}
+  const rank = id => { const i = order.indexOf(id); return i === -1 ? order.length : i; };
+  timers.sort((a, b) => rank(a.id) - rank(b.id));
+}
+
+function renderLiveBox() {
+  const placeholder = document.getElementById('live-placeholder');
+  const content = document.getElementById('live-content');
+
+  const shown = getShownTimer();
+
+  if (!shown) {
+    placeholder.style.display = 'block';
+    content.style.display = 'none';
+  } else {
+    placeholder.style.display = 'none';
+    content.style.display = 'block';
+
+    content.innerHTML = sceneHTML({
+      name: '', // mirrors the preview cards, which never show the name
+      value: formatTime(getDisplayValue(shown)),
+      colour: shown.colour, size: shown.size, position: shown.position, showTime: !!shown.show_current_time
+    });
+  }
+
+}
+
+// ---------- Animation loop ----------
+// Patches text/colour of running timers each frame without rebuilding
+// row/button markup, which would otherwise swallow in-flight clicks.
+function tick() {
+  let structuralChange = false;
+  timers.forEach(t => {
+    const r = runtime[t.id];
+    if (r && r.isRunning) {
+      if (isCountdown(t)) {
+        const remaining = t.duration_seconds - getElapsed(t.id);
+        if (remaining <= 0) {
+          r.elapsedBase = t.duration_seconds;
+          r.isRunning = false;
+          r.isPaused = false;
+          addLog(t.name, 'ENDED', typeLabel(t));
+          structuralChange = true;
+          return;
+        }
+      }
+      const value = formatTime(getDisplayValue(t));
+      const card = document.querySelector(`.preview-card[data-id="${t.id}"]`);
+      if (card) {
+        const pv = card.querySelector('.scene-value');
+        if (pv) pv.textContent = value;
+        applyRunColour(card, getRunColour(t));
+      }
+      const row = document.querySelector(`.control-row[data-id="${t.id}"]`);
+      if (row) {
+        const timeEl = row.querySelector('.row-time');
+        timeEl.textContent = value;
+        timeEl.style.color = COLOUR_MAP[t.colour] || '#eaeaea';
+        row.querySelector('.row-stats').innerHTML = rowStatsHTML(t);
+        applyRunColour(row, getRunColour(t));
+      }
+    }
+  });
+  if (structuralChange) { renderPreviews(); renderControlRows(); pushLive(); }
+  document.querySelectorAll('#preview-list .scene-clock').forEach(s => s.textContent = nowHHMM());
+  renderLiveBox();
+  requestAnimationFrame(tick);
+}
+
+// ---------- Init ----------
+renderLog();
+fetchTimers();
+setInterval(pushLive, 1000); // keeps output.html correct after a server restart
+requestAnimationFrame(tick);
+</script>
+
+</body>
+</html>
