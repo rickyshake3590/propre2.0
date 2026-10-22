@@ -48,6 +48,8 @@
   }
   header h1 { font-size: 22px; letter-spacing: 2px; color: var(--accent); }
   header span { font-size: 12px; color: var(--text-dim); letter-spacing: 1px; }
+  header .mirror-info { margin-left: auto; font-size: 11px; color: var(--text-dim); text-align: right; user-select: text; }
+  header .mirror-info b { color: var(--text); font-weight: normal; }
 
   .app-layout {
     flex: 1;
@@ -250,12 +252,41 @@
   .drag-handle svg { width: 10px; height: 16px; fill: currentColor; }
   .control-row.dragging { opacity: 0.4; }
   .control-row.drop-target { outline: 2px dashed var(--accent); outline-offset: 3px; }
+  .preview-card.dragging { opacity: 0.4; }
+  .preview-card.drop-target { outline: 2px dashed var(--accent); outline-offset: 1px; }
+  .preview-card { cursor: grab; }
+  .preview-card:active { cursor: grabbing; }
+  .move-col { flex-shrink: 0; align-self: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .move-btn { width: 18px; height: 16px; background: none; border: none; color: #5a5a5a; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .move-btn:hover:not(:disabled) { color: var(--text); }
+  .move-btn:disabled { opacity: 0.2; cursor: default; }
+  .move-btn svg { width: 12px; height: 12px; }
   .control-row .row-name { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .control-row .row-state { font-size: 13px; color: var(--text-dim); }
   .control-row.running .row-state { color: var(--run-green); }
   .control-row.running.warn .row-state { color: var(--run-yellow); }
   .control-row.running.crit .row-state { color: var(--run-red); }
   .control-row .row-time { font-size: 26px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .control-row .row-time.editable { cursor: text; border-radius: 4px; width: fit-content; padding: 0 4px; margin-left: -4px; border-bottom: 1px dashed #444; }
+  .control-row .row-time.editable:hover { background: #262626; border-bottom-color: var(--accent); }
+  .row-time-input {
+    width: 100%; max-width: 150px; font-family: inherit; font-size: 26px; font-weight: 700; line-height: 1.15;
+    font-variant-numeric: tabular-nums; color: var(--text); background: #0d0d0d;
+    border: 1px solid var(--accent); border-radius: 4px; padding: 0 6px; outline: none;
+  }
+  .row-time-input.invalid { border-color: var(--run-red); }
+  /* Right-click menu */
+  #ctx-menu {
+    position: fixed; z-index: 1000; display: none; min-width: 170px;
+    background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px;
+    padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  }
+  .ctx-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 4px;
+    font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--text); cursor: pointer; user-select: none;
+  }
+  .ctx-item:hover { background: #2a2a2a; color: var(--accent); }
+  .ctx-item svg { width: 14px; height: 14px; }
   .control-row .row-stats { display: flex; gap: 14px; margin-top: 6px; font-size: 10px; color: var(--text-dim); }
   .control-row .row-stats b { display: block; font-weight: normal; color: #6d6d6d; font-variant-numeric: tabular-nums; }
 
@@ -296,6 +327,7 @@
 <header>
   <h1>PROPRE2.0</h1>
   <span>TIMER DASHBOARD</span>
+  <div class="mirror-info" id="mirror-info"></div>
 </header>
 
 <div class="app-layout">
@@ -362,6 +394,10 @@
       <div id="form-preview" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; padding: 12px; margin-bottom: 10px; display: none;"></div>
       <button type="submit" class="btn btn-primary">+ Create</button>
     </form>
+
+    <div class="panel-title" style="margin-top:18px;">Quick Add</div>
+    <button type="button" class="btn btn-secondary" id="add-blank-btn" style="width:100%;">+ Add Blank Slide</button>
+    <div class="form-error" id="blank-error"></div>
   </div>
 
   <!-- MIDDLE COLUMN — Previews only -->
@@ -398,6 +434,11 @@
   <div class="timer-log-entries" id="log-entries"></div>
 </div>
 
+<!-- Right-click menu for timer cards / rows -->
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-duplicate"></div>
+</div>
+
 <script>
 const API = '/api/timers';
 const LOG_KEY = 'propre_timer_log';
@@ -416,16 +457,23 @@ const ICONS = {
   stop: '<svg viewBox="0 0 20 20" fill="currentColor"><rect x="5" y="5" width="10" height="10"/></svg>',
   restart: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6A6 6 0 1 0 16 11"/><path d="M16 3v4h-4"/></svg>',
   trash: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M8 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M6 6l1 11a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-11"/></svg>',
+  up: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l6-6 6 6"/></svg>',
+  down: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l6 6 6-6"/></svg>',
+  copy: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M13 7V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H7"/></svg>',
   clock: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l3 2"/></svg>'
 };
 
-const TYPE_LABELS = { countdown: 'Countdown', countup: 'Countup', 'altar-call': 'Altar Call' };
+const TYPE_LABELS = { countdown: 'Countdown', countup: 'Countup', 'altar-call': 'Altar Call', blank: 'Blank' };
 const typeLabel = t => TYPE_LABELS[t.type] || 'Countdown';
-const isCountdown = t => t.type !== 'countup'; // altar call counts down
+const isBlank = t => t.type === 'blank'; // blank slide: output shows nothing
+const isCountdown = t => t.type !== 'countup' && t.type !== 'blank'; // altar call counts down
 
 let timers = [];
 let runtime = {};
 let selectedId = null;
+let editingId = null;      // control row whose timer length is being edited
+let editingValue = '';
+let rerendering = false;   // true while the control list is being rebuilt (ignores the blur that causes)
 
 // ---------- Utility ----------
 function formatTime(totalSeconds) {
@@ -524,6 +572,13 @@ async function createTimer(payload) {
   const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to create timer');
+  return data;
+}
+
+async function updateTimer(id, payload) {
+  const res = await fetch(`${API}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to update timer');
   return data;
 }
 
@@ -671,7 +726,8 @@ document.getElementById('create-form').addEventListener('submit', async (e) => {
     const created = await createTimer(payload);
     runtime[created.id] = { isRunning: false, isPaused: false, elapsedBase: 0, startedAt: 0 };
     timers.push(created);
-    addLog(created.name, 'CREATED', created.type === 'countup' ? '' : `Duration: ${created.duration_seconds}s`);
+    saveOrder();
+    addLog(created.name, 'CREATED', (created.type === 'countup' || created.type === 'blank') ? '' : `Duration: ${created.duration_seconds}s`);
     document.getElementById('create-form').reset();
     updateDurationField();
     document.getElementById('f-size').value = 'large';
@@ -690,6 +746,83 @@ document.getElementById('create-form').addEventListener('submit', async (e) => {
     errorEl.style.display = 'block';
   }
 });
+
+// ---------- Blank slide ----------
+document.getElementById('add-blank-btn').addEventListener('click', async () => {
+  const errorEl = document.getElementById('blank-error');
+  errorEl.style.display = 'none';
+  try {
+    const created = await createTimer({
+      name: 'Blank', duration_seconds: 0, type: 'blank', position: 'middle-center',
+      size: 'large', colour: 'white', show_title: true, show_current_time: false
+    });
+    runtime[created.id] = { isRunning: false, isPaused: false, elapsedBase: 0, startedAt: 0 };
+    timers.push(created);
+    saveOrder();
+    addLog(created.name, 'CREATED', 'Blank slide');
+    renderAll();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
+
+// ---------- Right-click menu + duplicate ----------
+let ctxId = null;
+const ctxMenu = document.getElementById('ctx-menu');
+document.getElementById('ctx-duplicate').innerHTML = ICONS.copy + '<span>Duplicate</span>';
+
+function hideCtxMenu() { ctxMenu.style.display = 'none'; ctxId = null; }
+
+document.addEventListener('contextmenu', e => {
+  if (e.target.closest('input, textarea')) return; // keep the normal menu inside text boxes
+  const item = e.target.closest('.preview-card, .control-row');
+  if (!item) { hideCtxMenu(); return; }
+  e.preventDefault();
+  ctxId = Number(item.dataset.id);
+  ctxMenu.style.display = 'block';
+  const x = Math.min(e.clientX, window.innerWidth - ctxMenu.offsetWidth - 4);
+  const y = Math.min(e.clientY, window.innerHeight - ctxMenu.offsetHeight - 4);
+  ctxMenu.style.left = Math.max(0, x) + 'px';
+  ctxMenu.style.top = Math.max(0, y) + 'px';
+});
+document.addEventListener('mousedown', e => { if (!ctxMenu.contains(e.target)) hideCtxMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideCtxMenu(); });
+window.addEventListener('resize', hideCtxMenu);
+window.addEventListener('blur', hideCtxMenu);
+document.addEventListener('scroll', hideCtxMenu, true);
+
+document.getElementById('ctx-duplicate').addEventListener('click', () => {
+  const id = ctxId;
+  hideCtxMenu();
+  if (id !== null) duplicateTimer(id);
+});
+
+// Creates a copy with the same settings and places it right after the original
+async function duplicateTimer(id) {
+  const t = timers.find(x => x.id === id);
+  if (!t) return;
+  try {
+    const created = await createTimer({
+      name: `${t.name.slice(0, 32)} (copy)`,
+      duration_seconds: t.duration_seconds,
+      type: t.type,
+      position: t.position,
+      size: t.size,
+      colour: t.colour,
+      show_title: !!t.show_title,
+      show_current_time: !!t.show_current_time
+    });
+    runtime[created.id] = { isRunning: false, isPaused: false, elapsedBase: 0, startedAt: 0 };
+    const idx = timers.findIndex(x => x.id === id);
+    timers.splice(idx + 1, 0, created);
+    saveOrder();
+    addLog(created.name, 'DUPLICATED', `from ${t.name}`);
+    renderAll();
+  } catch (err) {
+    alert(err.message);
+  }
+}
 
 // ---------- Selection ----------
 function selectTimer(id) {
@@ -805,15 +938,13 @@ function pushLive() {
 function renderPreviews() {
   const el = document.getElementById('preview-list');
   const scroll = el.scrollTop;
-  const order = Object.keys(POSITION_LABELS);
-  const sorted = [...timers].sort((a, b) => order.indexOf(a.position) - order.indexOf(b.position));
-  if (sorted.length === 0) { el.innerHTML = '<div class="empty-state">No timers created yet.</div>'; return; }
-  el.innerHTML = sorted.map(t => `
-    <div class="preview-card ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}" onclick="selectTimer(${t.id})">
+  if (timers.length === 0) { el.innerHTML = '<div class="empty-state">No timers created yet.</div>'; return; }
+  el.innerHTML = timers.map(t => `
+    <div class="preview-card ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}" draggable="true" onclick="selectTimer(${t.id})">
       ${sceneHTML({
         name: '',
-        value: formatTime(getDisplayValue(t)),
-        colour: t.colour, size: t.size, position: t.position, showTime: !!t.show_current_time
+        value: isBlank(t) ? '' : formatTime(getDisplayValue(t)),
+        colour: t.colour, size: t.size, position: t.position, showTime: !isBlank(t) && !!t.show_current_time
       })}
       <div class="preview-footer" style="color:${nameColourFor(t.type)}">${escapeHtml(t.name)}</div>
     </div>`).join('');
@@ -821,6 +952,7 @@ function renderPreviews() {
     const card = el.querySelector(`.preview-card[data-id="${t.id}"]`);
     if (card) applyRunColour(card, getRunColour(t));
   });
+  bindDrag(el, '.preview-card', false);
   el.scrollTop = scroll;
 }
 
@@ -833,6 +965,7 @@ function fmtDur(sec) {
 
 // Stats shown under each control row (updated every frame by tick())
 function rowStats(t) {
+  if (isBlank(t)) return [];
   const r = runtime[t.id];
   const elapsed = getElapsed(t.id);
   const started = r && r.startedClock ? r.startedClock : '--:--';
@@ -851,36 +984,130 @@ function renderControlRows() {
   const el = document.getElementById('control-rows');
   const scroll = el.scrollTop;
   if (timers.length === 0) { el.innerHTML = '<div class="empty-state">No timers yet.</div>'; el.style.maxHeight = ''; return; }
-  el.innerHTML = timers.map(t => {
+  rerendering = true;
+  el.innerHTML = timers.map((t, i) => {
     const r = runtime[t.id];
     const state = getState(t);
-    const mainBtn = r.isRunning
+    const mainBtn = isBlank(t) ? '' : r.isRunning
       ? `<button class="icon-btn" title="Pause" onclick="pauseTimer(${t.id})">${ICONS.pause}</button>`
       : `<button class="icon-btn" title="${r.isPaused ? 'Resume' : 'Start'}" onclick="startTimer(${t.id})">${ICONS.play}</button>`;
     return `
       <div class="control-row ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}">
-        <div class="drag-handle" title="Drag to reorder">${DRAG_HANDLE}</div>
+        <div class="move-col">
+          <button class="move-btn" title="Move up" ${i === 0 ? 'disabled' : ''} onclick="moveTimerBy(${t.id}, -1)">${ICONS.up}</button>
+          <div class="drag-handle" title="Drag to reorder">${DRAG_HANDLE}</div>
+          <button class="move-btn" title="Move down" ${i === timers.length - 1 ? 'disabled' : ''} onclick="moveTimerBy(${t.id}, 1)">${ICONS.down}</button>
+        </div>
         <div class="row-info" onclick="selectTimer(${t.id})">
           <div class="row-name" style="color:${nameColourFor(t.type)}">${escapeHtml(t.name)}</div>
-          <div class="row-state">${typeLabel(t)} · ${state.charAt(0).toUpperCase() + state.slice(1)}</div>
-          <div class="row-time" style="color:${COLOUR_MAP[t.colour] || '#eaeaea'}">${formatTime(getDisplayValue(t))}</div>
+          <div class="row-state">${isBlank(t) ? 'Blank slide · Shows nothing' : typeLabel(t) + ' · ' + state.charAt(0).toUpperCase() + state.slice(1)}</div>
+          ${timeCellHTML(t)}
           <div class="row-stats">${rowStatsHTML(t)}</div>
         </div>
         <div class="row-icons">
           ${mainBtn}
-          <button class="icon-btn" title="Restart" onclick="restartTimer(${t.id})">${ICONS.restart}</button>
+          ${isBlank(t) ? '' : `<button class="icon-btn" title="Restart" onclick="restartTimer(${t.id})">${ICONS.restart}</button>`}
           <button class="icon-btn icon-danger" title="Delete" onclick="removeTimer(${t.id})">${ICONS.trash}</button>
         </div>
       </div>
     `;
   }).join('');
+  setTimeout(() => { rerendering = false; }, 0);
   timers.forEach(t => {
     const row = el.querySelector(`.control-row[data-id="${t.id}"]`);
     if (row) applyRunColour(row, getRunColour(t));
   });
-  bindRowDrag(el);
+  bindDrag(el, '.control-row', true);
+  restoreEditFocus();
   limitVisibleRows();
   el.scrollTop = scroll;
+}
+
+// ---------- Edit a timer's length from the control list ----------
+// Accepts H:MM:SS, MM:SS, or just a number (minutes). Returns NaN if invalid.
+function parseEditDuration(str) {
+  str = String(str).trim();
+  let m;
+  if ((m = /^(\d{1,2}):([0-5]\d):([0-5]\d)$/.exec(str))) return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]);
+  if ((m = /^(\d{1,3}):([0-5]\d)$/.exec(str))) return (+m[1]) * 60 + (+m[2]);
+  if ((m = /^(\d{1,3})$/.exec(str))) return (+m[1]) * 60;
+  return NaN;
+}
+
+function timeCellHTML(t) {
+  if (isBlank(t)) return '<div class="row-time" style="color:var(--text-dim)">BLANK</div>';
+  const colour = COLOUR_MAP[t.colour] || '#eaeaea';
+  if (!isCountdown(t)) return `<div class="row-time" style="color:${colour}">${formatTime(getDisplayValue(t))}</div>`;
+  if (editingId === t.id) {
+    return `<input class="row-time-input" type="text" maxlength="8" placeholder="MM:SS" spellcheck="false" autocomplete="off"
+      oninput="editingValue = this.value; this.classList.remove('invalid')"
+      onkeydown="editKey(event, ${t.id})"
+      onblur="commitEdit(${t.id}, true)"
+      onclick="event.stopPropagation()">`;
+  }
+  return `<div class="row-time editable" title="Click to change the timer length" style="color:${colour}"
+    onclick="event.stopPropagation(); startEdit(${t.id})">${formatTime(getDisplayValue(t))}</div>`;
+}
+
+function startEdit(id) {
+  const t = timers.find(x => x.id === id);
+  if (!t || !isCountdown(t)) return;
+  editingId = id;
+  editingValue = formatTime(t.duration_seconds);
+  renderControlRows();
+  const input = document.querySelector('.row-time-input');
+  if (input) { input.focus(); input.select(); }
+}
+
+function restoreEditFocus() {
+  if (editingId === null) return;
+  const input = document.querySelector('.row-time-input');
+  if (!input) return;
+  input.value = editingValue;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function cancelEdit() {
+  editingId = null;
+  renderControlRows();
+}
+
+function editKey(e, id) {
+  if (e.key === 'Enter') { e.preventDefault(); commitEdit(id, false); }
+  else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+}
+
+async function commitEdit(id, fromBlur) {
+  if (editingId !== id || (fromBlur && rerendering)) return;
+  const t = timers.find(x => x.id === id);
+  const secs = parseEditDuration(editingValue);
+  if (!t || !Number.isFinite(secs) || secs < 1) {
+    if (fromBlur || !t) return cancelEdit();
+    const input = document.querySelector('.row-time-input');
+    if (input) input.classList.add('invalid');
+    return;
+  }
+  if (secs === t.duration_seconds) return cancelEdit();
+
+  const r = runtime[id];
+  editingId = null;
+  if (r && (r.isRunning || r.isPaused) && !confirm(`Change "${t.name}" to ${formatTime(secs)}? This resets the timer.`)) {
+    renderControlRows();
+    return;
+  }
+  try {
+    const updated = await updateTimer(id, { duration_seconds: secs });
+    t.duration_seconds = updated.duration_seconds;
+    r.isRunning = false;
+    r.isPaused = false;
+    r.elapsedBase = 0;
+    r.startedClock = null;
+    addLog(t.name, 'EDITED', `Set to ${fmtDur(secs)}`);
+  } catch (err) {
+    alert(err.message);
+  }
+  renderAll();
 }
 
 // Shows at most 4 control rows; the rest are reached by scrolling the list
@@ -897,32 +1124,36 @@ function limitVisibleRows() {
 // ---------- Control row reordering ----------
 let dragId = null;
 
-function bindRowDrag(el) {
-  el.querySelectorAll('.control-row').forEach(row => {
-    const handle = row.querySelector('.drag-handle');
-    handle.addEventListener('mousedown', () => { row.draggable = true; });
-    row.addEventListener('dragstart', e => {
-      dragId = Number(row.dataset.id);
+// Shared by the control rows (drag by the handle) and the preview cards (drag anywhere on the card).
+// Both lists show the same `timers` order, so a move in one is mirrored in the other.
+function bindDrag(container, selector, useHandle) {
+  container.querySelectorAll(selector).forEach(item => {
+    if (useHandle) {
+      item.querySelector('.drag-handle').addEventListener('mousedown', () => { item.draggable = true; });
+    }
+    item.addEventListener('dragstart', e => {
+      dragId = Number(item.dataset.id);
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', String(dragId));
-      row.classList.add('dragging');
+      item.classList.add('dragging');
     });
-    row.addEventListener('dragend', () => {
+    item.addEventListener('dragend', () => {
       dragId = null;
-      row.draggable = false;
+      if (useHandle) item.draggable = false;
+      item.classList.remove('dragging');
       clearDropTargets();
     });
-    row.addEventListener('dragover', e => {
+    item.addEventListener('dragover', e => {
       if (dragId === null) return;
       e.preventDefault();
       clearDropTargets();
-      row.classList.add('drop-target');
+      item.classList.add('drop-target');
     });
-    row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
-    row.addEventListener('drop', e => {
+    item.addEventListener('dragleave', () => item.classList.remove('drop-target'));
+    item.addEventListener('drop', e => {
       if (dragId === null) return;
       e.preventDefault();
-      moveTimer(dragId, Number(row.dataset.id));
+      moveTimer(dragId, Number(item.dataset.id));
     });
   });
 }
@@ -933,7 +1164,7 @@ document.addEventListener('mouseup', () => {
 });
 
 function clearDropTargets() {
-  document.querySelectorAll('.control-row.drop-target').forEach(r => r.classList.remove('drop-target'));
+  document.querySelectorAll('.drop-target').forEach(r => r.classList.remove('drop-target'));
 }
 
 function moveTimer(fromId, toId) {
@@ -943,7 +1174,22 @@ function moveTimer(fromId, toId) {
   const [moved] = timers.splice(from, 1);
   timers.splice(to, 0, moved);
   dragId = null;
+  saveOrder();
+  renderAll();
+}
+
+function saveOrder() {
   localStorage.setItem(ORDER_KEY, JSON.stringify(timers.map(t => t.id)));
+}
+
+// Up/down arrow buttons on each control row (also works on touch screens, where dragging doesn't)
+function moveTimerBy(id, delta) {
+  const from = timers.findIndex(t => t.id === id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= timers.length) return;
+  const [moved] = timers.splice(from, 1);
+  timers.splice(to, 0, moved);
+  saveOrder();
   renderAll();
 }
 
@@ -969,8 +1215,8 @@ function renderLiveBox() {
 
     content.innerHTML = sceneHTML({
       name: '', // mirrors the preview cards, which never show the name
-      value: formatTime(getDisplayValue(shown)),
-      colour: shown.colour, size: shown.size, position: shown.position, showTime: !!shown.show_current_time
+      value: isBlank(shown) ? '' : formatTime(getDisplayValue(shown)),
+      colour: shown.colour, size: shown.size, position: shown.position, showTime: !isBlank(shown) && !!shown.show_current_time
     });
   }
 
@@ -1004,9 +1250,11 @@ function tick() {
       }
       const row = document.querySelector(`.control-row[data-id="${t.id}"]`);
       if (row) {
-        const timeEl = row.querySelector('.row-time');
-        timeEl.textContent = value;
-        timeEl.style.color = COLOUR_MAP[t.colour] || '#eaeaea';
+        const timeEl = row.querySelector('.row-time'); // absent while this row's length is being edited
+        if (timeEl) {
+          timeEl.textContent = value;
+          timeEl.style.color = COLOUR_MAP[t.colour] || '#eaeaea';
+        }
         row.querySelector('.row-stats').innerHTML = rowStatsHTML(t);
         applyRunColour(row, getRunColour(t));
       }
@@ -1018,7 +1266,21 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
+// ---------- Second screen address (for mirroring on another computer) ----------
+async function showMirrorInfo() {
+  const el = document.getElementById('mirror-info');
+  try {
+    const res = await fetch('/api/network');
+    if (!res.ok) return;
+    const n = await res.json();
+    const urls = [n.hostname, ...n.addresses].map(h => `http://${h}:${n.port}/output.html`);
+    el.innerHTML = 'Second screen — open on the other computer: <b>' + escapeHtml(urls[0]) + '</b>' +
+      (urls.length > 1 ? '<br>or ' + urls.slice(1).map(escapeHtml).join(' · ') : '');
+  } catch (e) {}
+}
+
 // ---------- Init ----------
+showMirrorInfo();
 renderLog();
 fetchTimers();
 setInterval(pushLive, 1000); // keeps output.html correct after a server restart

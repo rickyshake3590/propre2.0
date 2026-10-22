@@ -2,8 +2,11 @@
 import json
 import os
 import re
+import socket
 import socketserver
 import sqlite3
+import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,8 +16,13 @@ from urllib.parse import unquote, urlparse
 ROOT = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("PROPRE_DB", str(ROOT / "timers.db"))
 PORT = 3000
+# Listens on the network so a second computer (e.g. E2) can mirror the output screen.
+# Other computers are view-only: they can fetch the live state and output.html, nothing else.
+# Set PROPRE_HOST=127.0.0.1 to keep the server private to this computer.
+HOST = os.environ.get("PROPRE_HOST", "0.0.0.0")
+IS_WIN = sys.platform == "win32"
 
-TYPES = ["countdown", "countup", "altar-call"]
+TYPES = ["countdown", "countup", "altar-call", "blank"]
 POSITIONS = ["top-left", "top-center", "top-right", "middle-left", "middle-center", "middle-right",
              "bottom-left", "bottom-center", "bottom-right"]
 SIZES = ["small", "medium", "large"]
@@ -70,6 +78,45 @@ def init_db():
     conn.close()
 
 
+def local_hostname():
+    if sys.platform == "darwin":
+        try:
+            name = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True, text=True,
+                                  timeout=2).stdout.strip()
+            if name:
+                return name + ".local"
+        except Exception:
+            pass
+    return socket.gethostname()
+
+
+def local_addresses():
+    found = []
+
+    def add(ip):
+        if ip and not ip.startswith("127.") and ip not in found:
+            found.append(ip)
+
+    try:
+        if IS_WIN:
+            out = subprocess.run(["ipconfig"], capture_output=True, text=True, timeout=3).stdout
+            for m in re.finditer(r"IPv4[^:]*:\s*([\d.]+)", out):
+                add(m.group(1))
+        else:
+            out = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=3).stdout
+            for m in re.finditer(r"\binet (\d+\.\d+\.\d+\.\d+)", out):
+                add(m.group(1))
+    except Exception:
+        pass
+    if not found:
+        try:
+            for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                add(info[4][0])
+        except Exception:
+            pass
+    return found
+
+
 def parse_int(value):
     if isinstance(value, bool):
         return None
@@ -82,6 +129,14 @@ def parse_int(value):
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
+
+    def is_local(self):
+        # True for requests coming from this computer (including via its own network address)
+        ip = self.client_address[0]
+        return ip.startswith("127.") or ip == "::1" or ip == self.connection.getsockname()[0]
+
+    def forbid(self):
+        self.send_json(403, {"error": "Only the main computer can do that"})
 
     def send_json(self, status, payload):
         body = json.dumps(payload).encode()
@@ -100,8 +155,10 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return data if isinstance(data, dict) else None
 
-    def serve_static(self, path):
+    def serve_static(self, path, local=True):
         rel = "index.html" if path == "/" else unquote(path).lstrip("/")
+        if not local and not (rel == "output.html" or rel.startswith("fonts/")):
+            return self.forbid()
         try:
             target = (ROOT / rel).resolve()
         except (ValueError, OSError):
@@ -119,7 +176,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        local = self.is_local()
+        if path == "/api/network":
+            if not local:
+                return self.forbid()
+            return self.send_json(200, {"hostname": local_hostname(), "addresses": local_addresses(), "port": PORT})
         if path == "/api/timers":
+            if not local:
+                return self.forbid()
             conn = connect()
             rows = conn.execute("SELECT * FROM timers ORDER BY created_at ASC").fetchall()
             conn.close()
@@ -129,9 +193,11 @@ class Handler(BaseHTTPRequestHandler):
                 elapsed = live["elapsed"] + ((time.time() - live["stamp"]) if live["isRunning"] else 0)
                 return self.send_json(200, {"timer": live["timer"], "elapsed": elapsed,
                                             "isRunning": live["isRunning"]})
-        self.serve_static(path)
+        self.serve_static(path, local)
 
     def do_POST(self):
+        if not self.is_local():
+            return self.forbid()
         path = urlparse(self.path).path
         body = self.read_json()
         if body is None:
@@ -155,7 +221,7 @@ class Handler(BaseHTTPRequestHandler):
         if timer_type not in TYPES:
             return self.send_json(400, {"error": f"Type must be one of: {', '.join(TYPES)}"})
         duration = parse_int(body.get("duration_seconds"))
-        minimum = 0 if timer_type == "countup" else 1
+        minimum = 0 if timer_type in ("countup", "blank") else 1
         if duration is None or duration < minimum:
             return self.send_json(400, {"error": f"Duration must be at least {minimum} second(s)"})
         position = body.get("position")
@@ -181,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(201, dict(row))
 
     def do_PUT(self):
+        if not self.is_local():
+            return self.forbid()
         path = urlparse(self.path).path
         if not path.startswith("/api/timers/"):
             return self.send_json(404, {"error": "Not found"})
@@ -214,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(200, dict(row))
 
     def do_DELETE(self):
+        if not self.is_local():
+            return self.forbid()
         path = urlparse(self.path).path
         if not path.startswith("/api/timers/"):
             return self.send_json(404, {"error": "Not found"})
@@ -237,8 +307,10 @@ class Server(ThreadingHTTPServer):
 
 def main():
     init_db()
-    server = Server(("127.0.0.1", PORT), Handler)
+    server = Server((HOST, PORT), Handler)
     print(f"ProPre2.0 Timer Server running on http://localhost:{PORT}", flush=True)
+    if HOST != "127.0.0.1":
+        print(f"Second screens can open http://{local_hostname()}:{PORT}/output.html", flush=True)
     server.serve_forever()
 
 

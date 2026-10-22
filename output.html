@@ -69,7 +69,7 @@ function nowHHMM() {
 
 async function poll() {
   try {
-    const res = await fetch('/api/live');
+    const res = await fetch('/api/live', { cache: 'no-store' });
     live = await res.json();
     fetchedAt = performance.now();
   } catch (e) {}
@@ -79,7 +79,7 @@ function render() {
   const scene = document.getElementById('scene');
   const inner = document.getElementById('scene-inner');
 
-  if (!live || !live.timer) {
+  if (!live || !live.timer || live.timer.type === 'blank') {
     inner.innerHTML = '';
   } else {
     const t = live.timer;
@@ -102,7 +102,7 @@ function render() {
 }
 
 poll();
-setInterval(poll, 250);
+setInterval(poll, 100); // frequent polling keeps a mirrored screen within a fraction of a second
 requestAnimationFrame(render);
 
 document.addEventListener('click', () => {

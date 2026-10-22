@@ -68,8 +68,8 @@ def browser_candidates():
     return []
 
 
-def open_output_fullscreen():
-    url = f"{BASE}/output.html"
+def open_output_fullscreen(url=None):
+    url = url or f"{BASE}/output.html"
     for paths, kind in browser_candidates():
         exe = next((p for p in paths if os.path.exists(p)), None)
         if not exe:
