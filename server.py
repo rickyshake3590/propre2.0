@@ -28,7 +28,7 @@ POSITIONS = ["top-left", "top-center", "top-right", "middle-left", "middle-cente
 SIZES = ["small", "medium", "large"]
 COLOURS = ["white", "yellow", "red"]
 
-STATIC_TYPES = {".html": "text/html; charset=utf-8", ".ttf": "font/ttf"}
+STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".ttf": "font/ttf"}
 
 TABLE_COLUMNS = """
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,7 +157,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def serve_static(self, path, local=True):
         rel = "index.html" if path == "/" else unquote(path).lstrip("/")
-        if not local and not (rel == "output.html" or rel.startswith("fonts/")):
+        if not local and not (rel == "output.html" or rel.startswith("fonts/") or rel.startswith("js/")):
             return self.forbid()
         try:
             target = (ROOT / rel).resolve()

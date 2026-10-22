@@ -50,6 +50,7 @@
   <div class="scene-inner" id="scene-inner"></div>
 </div>
 
+<script src="js/store.js"></script>
 <script>
 const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#e04b4b' };
 
@@ -69,8 +70,7 @@ function nowHHMM() {
 
 async function poll() {
   try {
-    const res = await fetch('/api/live', { cache: 'no-store' });
-    live = await res.json();
+    live = await Store.getLive();
     fetchedAt = performance.now();
   } catch (e) {}
 }
