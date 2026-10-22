@@ -33,12 +33,19 @@
     overflow: hidden;
     font-family: 'Big Noodle Tilting', monospace;
   }
-  .scene-inner { height: 100%; padding: 3cqh 4cqh; display: flex; flex-direction: column; }
+  .scene-inner { height: 100%; padding: 0; display: flex; flex-direction: column; }
+  .scene-name { line-height: 0.85; white-space: nowrap; color: #fff; margin-bottom: 1cqh; font-family: Helvetica, Arial, sans-serif; font-weight: 700; }
   .scene-clock { line-height: 0.85; white-space: nowrap; color: #8a8a8a; margin-top: 1cqh; font-variant-numeric: tabular-nums; }
   .scene-value { line-height: 0.85; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scene.size-extra-small .scene-value { font-size: 18cqh; }
+  .scene.size-extra-small .scene-name { font-size: 5.25cqh; }
+  .scene.size-extra-small .scene-clock { font-size: 8.25cqh; }
   .scene.size-small .scene-value { font-size: 24cqh; }
   .scene.size-medium .scene-value { font-size: 52cqh; }
   .scene.size-large .scene-value { font-size: 72cqh; }
+  .scene.size-small .scene-name { font-size: 7cqh; }
+  .scene.size-medium .scene-name { font-size: 9cqh; }
+  .scene.size-large .scene-name { font-size: 11cqh; }
   .scene.size-small .scene-clock { font-size: 11cqh; }
   .scene.size-medium .scene-clock { font-size: 16cqh; }
   .scene.size-large .scene-clock { font-size: 20cqh; }
@@ -51,7 +58,7 @@
 </div>
 
 <script>
-const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#e04b4b' };
+const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#ff1414' };
 
 let live = null;
 let fetchedAt = 0;
@@ -61,6 +68,12 @@ function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
 }
 
 function nowHHMM() {
@@ -95,6 +108,7 @@ function render() {
     inner.style.alignItems = alignH;
     inner.style.textAlign = textAlign;
     inner.innerHTML = `
+      ${t.show_title ? `<div class="scene-name">${escapeHtml(t.name)}</div>` : ''}
       <div class="scene-value" style="color:${COLOUR_MAP[t.colour] || '#eaeaea'}">${formatTime(value)}</div>
       ${t.show_current_time ? `<div class="scene-clock">${nowHHMM()}</div>` : ''}`;
   }

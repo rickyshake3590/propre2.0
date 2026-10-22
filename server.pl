@@ -27,7 +27,7 @@ my $LEGACY_DB = "$ROOT/timers.db";   # timers from the old Python version are im
 my @TYPES     = qw(countdown countup altar-call blank);
 my @POSITIONS = qw(top-left top-center top-right middle-left middle-center middle-right
                    bottom-left bottom-center bottom-right);
-my @SIZES     = qw(small medium large);
+my @SIZES     = qw(extra-small small medium large);
 my @COLOURS   = qw(white yellow red);
 my %STATIC_TYPES = ('.html' => 'text/html; charset=utf-8', '.ttf' => 'font/ttf');
 my %REASON = (200 => 'OK', 201 => 'Created', 400 => 'Bad Request', 403 => 'Forbidden',

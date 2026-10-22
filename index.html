@@ -12,6 +12,7 @@
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  button, input, select, textarea { font-family: inherit; }
 
   :root {
     --bg: #0a0a0a;
@@ -27,7 +28,7 @@
     --run-yellow: #FDE047;
     --run-red: #F87171;
     --run-text-dark: #14231a;
-    font-family: 'Big Noodle Tilting', 'Righteous', 'Arial Narrow', sans-serif;
+    font-family: Helvetica, Arial, sans-serif;
   }
 
   body {
@@ -165,19 +166,25 @@
     border: 2px solid var(--card-border);
     border-radius: 8px;
     overflow: hidden;
-    font-family: 'Big Noodle Tilting', monospace;
+    font-family: Helvetica, Arial, sans-serif;
   }
-  .scene-inner { height: 100%; padding: 3cqh 4cqh; display: flex; flex-direction: column; }
+  .scene-inner { height: 100%; padding: 0; display: flex; flex-direction: column; }
   .scene-name, .scene-clock { line-height: 0.85; white-space: nowrap; }
-  .scene-name { color: #fff; margin-bottom: 1cqh; }
-  .scene-clock { color: var(--text-dim); margin-top: 1cqh; font-variant-numeric: tabular-nums; }
-  .scene-value { line-height: 0.85; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scene-name { color: #fff; margin-bottom: 1cqh; font-weight: 700; }
+  .scene-clock { color: var(--text-dim); margin-top: 1cqh; font-variant-numeric: tabular-nums; font-family: 'Big Noodle Tilting', monospace; }
+  .scene-value { line-height: 0.85; font-variant-numeric: tabular-nums; white-space: nowrap; font-family: 'Big Noodle Tilting', monospace; }
+  .scene.size-extra-small .scene-value { font-size: 18cqh; }
+  .scene.size-extra-small .scene-name { font-size: 5.25cqh; }
+  .scene.size-extra-small .scene-clock { font-size: 8.25cqh; }
   .scene.size-small .scene-value { font-size: 24cqh; }
   .scene.size-medium .scene-value { font-size: 52cqh; }
   .scene.size-large .scene-value { font-size: 72cqh; }
-  .scene.size-small .scene-name, .scene.size-small .scene-clock { font-size: 11cqh; }
-  .scene.size-medium .scene-name, .scene.size-medium .scene-clock { font-size: 16cqh; }
-  .scene.size-large .scene-name, .scene.size-large .scene-clock { font-size: 20cqh; }
+  .scene.size-small .scene-name { font-size: 7cqh; }
+  .scene.size-small .scene-clock { font-size: 11cqh; }
+  .scene.size-medium .scene-name { font-size: 9cqh; }
+  .scene.size-medium .scene-clock { font-size: 16cqh; }
+  .scene.size-large .scene-name { font-size: 11cqh; }
+  .scene.size-large .scene-clock { font-size: 20cqh; }
 
   .preview-card {
     cursor: pointer;
@@ -266,11 +273,11 @@
   .control-row.running .row-state { color: var(--run-green); }
   .control-row.running.warn .row-state { color: var(--run-yellow); }
   .control-row.running.crit .row-state { color: var(--run-red); }
-  .control-row .row-time { font-size: 26px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .control-row .row-time { font-family: 'Big Noodle Tilting', monospace; font-size: 26px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.15; }
   .control-row .row-time.editable { cursor: text; border-radius: 4px; width: fit-content; padding: 0 4px; margin-left: -4px; border-bottom: 1px dashed #444; }
   .control-row .row-time.editable:hover { background: #262626; border-bottom-color: var(--accent); }
   .row-time-input {
-    width: 100%; max-width: 150px; font-family: inherit; font-size: 26px; font-weight: 700; line-height: 1.15;
+    width: 100%; max-width: 150px; font-family: 'Big Noodle Tilting', monospace; font-size: 26px; font-weight: 700; line-height: 1.15;
     font-variant-numeric: tabular-nums; color: var(--text); background: #0d0d0d;
     border: 1px solid var(--accent); border-radius: 4px; padding: 0 6px; outline: none;
   }
@@ -369,6 +376,7 @@
       <div class="field">
         <label>Size</label>
         <select id="f-size">
+          <option value="extra-small">Extra Small</option>
           <option value="small">Small</option>
           <option value="medium">Medium</option>
           <option value="large" selected>Large</option>
@@ -444,7 +452,7 @@ const API = '/api/timers';
 const LOG_KEY = 'propre_timer_log';
 const ORDER_KEY = 'propre_control_order';
 const DRAG_HANDLE = '<svg viewBox="0 0 10 16"><circle cx="2.5" cy="2.5" r="1.5"/><circle cx="7.5" cy="2.5" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13.5" r="1.5"/><circle cx="7.5" cy="13.5" r="1.5"/></svg>';
-const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#e04b4b' };
+const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#ff1414' };
 const POSITION_LABELS = {
   'top-left': 'Top Left', 'top-center': 'Top Center', 'top-right': 'Top Right',
   'middle-left': 'Middle Left', 'middle-center': 'Middle Center', 'middle-right': 'Middle Right',
@@ -609,10 +617,6 @@ function parseDuration(str) {
   return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NaN;
 }
 
-// Altar Call names are always yellow; every other type keeps white names
-function nameColourFor(type) {
-  return type === 'altar-call' ? COLOUR_MAP.yellow : '#fff';
-}
 
 // Countup timers have no duration, so the field is disabled and not required
 function updateDurationField() {
@@ -627,7 +631,7 @@ function updateDurationField() {
 // ---------- Form preview & Show Current Time logic ----------
 
 function updateFormPreview() {
-  const name = document.getElementById('f-name').value.trim() || 'Timer Name';
+  const typedName = document.getElementById('f-name').value.trim();
   const duration = parseDuration(document.getElementById('f-duration').value) || 0;
   const showCurrentTime = document.getElementById('f-show-current-time').checked;
   const showTitle = document.getElementById('f-show-title').checked;
@@ -637,20 +641,29 @@ function updateFormPreview() {
 
   const previewEl = document.getElementById('form-preview');
 
-  if (!name.trim() && duration === 0) {
+  if (!typedName && duration === 0) {
     previewEl.style.display = 'none';
     return;
   }
 
   previewEl.style.display = 'block';
   previewEl.innerHTML = sceneHTML({
-    name: showTitle && name !== 'Timer Name' ? name : '',
-    value: formatTime(duration), colour, size, position, showTime: showCurrentTime,
-    nameColour: nameColourFor(document.getElementById('f-type').value)
+    name: showTitle ? typedName : '',
+    value: formatTime(duration), colour, size, position, showTime: showCurrentTime
   });
 }
 
 document.getElementById('f-name').addEventListener('input', updateFormPreview);
+// The colon is always shown and digits fill in from the right, so typing 300 gives 03:00
+function formatDurationInput(e) {
+  const typed = e.target.value.replace(/\D/g, '');
+  if (!typed) { e.target.value = ''; return; }
+  const digits = typed.replace(/^0+/, '').slice(-5) || '0';
+  const seconds = digits.slice(-2).padStart(2, '0');
+  const minutes = digits.slice(0, -2) || '0';
+  e.target.value = `${minutes.padStart(2, '0')}:${seconds}`;
+}
+document.getElementById('f-duration').addEventListener('input', formatDurationInput);
 document.getElementById('f-duration').addEventListener('input', updateFormPreview);
 document.getElementById('f-size').addEventListener('change', updateFormPreview);
 let priorColour = 'white';
@@ -834,6 +847,15 @@ function selectTimer(id) {
     startTimer(id);
     return;
   }
+  // Every click on an Altar Call timer starts it: a paused one resumes, anything else starts from the beginning
+  if (t && r && t.type === 'altar-call' && !r.isRunning) {
+    if (!r.isPaused) {
+      r.elapsedBase = 0;
+      r.startedClock = null;
+    }
+    startTimer(id);
+    return;
+  }
   renderAll();
 }
 
@@ -942,11 +964,11 @@ function renderPreviews() {
   el.innerHTML = timers.map(t => `
     <div class="preview-card ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}" draggable="true" onclick="selectTimer(${t.id})">
       ${sceneHTML({
-        name: '',
+        name: !isBlank(t) && t.show_title ? t.name : '',
         value: isBlank(t) ? '' : formatTime(getDisplayValue(t)),
-        colour: t.colour, size: t.size, position: t.position, showTime: !isBlank(t) && !!t.show_current_time
+        colour: t.colour, size: t.size, position: t.position, showTime: !isBlank(t) && !!t.show_current_time,
       })}
-      <div class="preview-footer" style="color:${nameColourFor(t.type)}">${escapeHtml(t.name)}</div>
+      <div class="preview-footer" style="color:#fff">${escapeHtml(t.name)}</div>
     </div>`).join('');
   timers.forEach(t => {
     const card = el.querySelector(`.preview-card[data-id="${t.id}"]`);
@@ -999,7 +1021,7 @@ function renderControlRows() {
           <button class="move-btn" title="Move down" ${i === timers.length - 1 ? 'disabled' : ''} onclick="moveTimerBy(${t.id}, 1)">${ICONS.down}</button>
         </div>
         <div class="row-info" onclick="selectTimer(${t.id})">
-          <div class="row-name" style="color:${nameColourFor(t.type)}">${escapeHtml(t.name)}</div>
+          <div class="row-name" style="color:#fff">${escapeHtml(t.name)}</div>
           <div class="row-state">${isBlank(t) ? 'Blank slide · Shows nothing' : typeLabel(t) + ' · ' + state.charAt(0).toUpperCase() + state.slice(1)}</div>
           ${timeCellHTML(t)}
           <div class="row-stats">${rowStatsHTML(t)}</div>
@@ -1214,9 +1236,9 @@ function renderLiveBox() {
     content.style.display = 'block';
 
     content.innerHTML = sceneHTML({
-      name: '', // mirrors the preview cards, which never show the name
+      name: !isBlank(shown) && shown.show_title ? shown.name : '',
       value: isBlank(shown) ? '' : formatTime(getDisplayValue(shown)),
-      colour: shown.colour, size: shown.size, position: shown.position, showTime: !isBlank(shown) && !!shown.show_current_time
+      colour: shown.colour, size: shown.size, position: shown.position, showTime: !isBlank(shown) && !!shown.show_current_time,
     });
   }
 
