@@ -6,7 +6,7 @@
 <title>ProPre2.0 — Output</title>
 <style>
   @font-face {
-    font-family: 'Big Noodle Titling';
+    font-family: 'Big Noodle Tilting';
     src: url('fonts/big_noodle_titling.ttf') format('truetype');
     font-display: swap;
   }
@@ -31,7 +31,7 @@
     border: none;
     border-radius: 0;
     overflow: hidden;
-    font-family: 'Big Noodle Titling', monospace;
+    font-family: 'Big Noodle Tilting', monospace;
   }
   .scene-inner { height: 100%; padding: 3cqh 4cqh; display: flex; flex-direction: column; }
   .scene-clock { line-height: 0.85; white-space: nowrap; color: #8a8a8a; margin-top: 1cqh; font-variant-numeric: tabular-nums; }
@@ -50,7 +50,6 @@
   <div class="scene-inner" id="scene-inner"></div>
 </div>
 
-<script src="js/store.js"></script>
 <script>
 const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#e04b4b' };
 
@@ -70,7 +69,8 @@ function nowHHMM() {
 
 async function poll() {
   try {
-    live = await Store.getLive();
+    const res = await fetch('/api/live', { cache: 'no-store' });
+    live = await res.json();
     fetchedAt = performance.now();
   } catch (e) {}
 }

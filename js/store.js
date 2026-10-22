@@ -1,15 +1,15 @@
 // Data layer for ProPre2.0.
-// When server.py is running (started by the launcher), timers and live state are shared
+// When server.pl is running (started by the launcher), timers and live state are shared
 // through it, and the mirror screen on a second computer works.
 // When it is not (e.g. the file was double-clicked, or the site is on GitHub Pages),
-// everything is kept in this browser's localStorage, so no Python or installs are needed.
+// everything is kept in this browser's localStorage, so nothing needs to be installed.
 // In browser mode the control page and output page must be opened in the same browser.
 (function () {
   const TIMERS_KEY = 'propre_timers';
   const NEXT_ID_KEY = 'propre_next_id';
   const LIVE_KEY = 'propre_live';
 
-  // Decide the mode once: /api/live only exists when server.py is running
+  // Decide the mode once: /api/live only exists when server.pl is running
   let serverMode = false;
   const ready = fetch('/api/live', { cache: 'no-store' })
     .then(res => { serverMode = res.ok; })

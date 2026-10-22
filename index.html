@@ -6,7 +6,7 @@
 <title>ProPre2.0 — Timer Dashboard</title>
 <style>
   @font-face {
-    font-family: 'Big Noodle Titling';
+    font-family: 'Big Noodle Tilting';
     src: url('fonts/big_noodle_titling.ttf') format('truetype');
     font-display: swap;
   }
@@ -27,7 +27,7 @@
     --run-yellow: #FDE047;
     --run-red: #F87171;
     --run-text-dark: #14231a;
-    font-family: 'Big Noodle Titling', 'Righteous', 'Arial Narrow', sans-serif;
+    font-family: 'Big Noodle Tilting', 'Righteous', 'Arial Narrow', sans-serif;
   }
 
   body {
@@ -165,7 +165,7 @@
     border: 2px solid var(--card-border);
     border-radius: 8px;
     overflow: hidden;
-    font-family: 'Big Noodle Titling', monospace;
+    font-family: 'Big Noodle Tilting', monospace;
   }
   .scene-inner { height: 100%; padding: 3cqh 4cqh; display: flex; flex-direction: column; }
   .scene-name, .scene-clock { line-height: 0.85; white-space: nowrap; }
@@ -439,8 +439,8 @@
   <div class="ctx-item" id="ctx-duplicate"></div>
 </div>
 
-<script src="js/store.js"></script>
 <script>
+const API = '/api/timers';
 const LOG_KEY = 'propre_timer_log';
 const ORDER_KEY = 'propre_control_order';
 const DRAG_HANDLE = '<svg viewBox="0 0 10 16"><circle cx="2.5" cy="2.5" r="1.5"/><circle cx="7.5" cy="2.5" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13.5" r="1.5"/><circle cx="7.5" cy="13.5" r="1.5"/></svg>';
@@ -559,7 +559,8 @@ document.getElementById('clear-log-btn').addEventListener('click', () => { saveL
 
 // ---------- API ----------
 async function fetchTimers() {
-  timers = await Store.listTimers();
+  const res = await fetch(API);
+  timers = await res.json();
   applySavedOrder();
   timers.forEach(t => {
     if (!runtime[t.id]) runtime[t.id] = { isRunning: false, isPaused: false, elapsedBase: 0, startedAt: 0 };
@@ -567,16 +568,23 @@ async function fetchTimers() {
   renderAll();
 }
 
-function createTimer(payload) {
-  return Store.createTimer(payload);
+async function createTimer(payload) {
+  const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to create timer');
+  return data;
 }
 
-function updateTimer(id, payload) {
-  return Store.updateTimer(id, payload);
+async function updateTimer(id, payload) {
+  const res = await fetch(`${API}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to update timer');
+  return data;
 }
 
-function deleteTimer(id) {
-  return Store.deleteTimer(id);
+async function deleteTimer(id) {
+  const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+  if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Failed to delete timer'); }
 }
 
 // ---------- Timer scene (shared by form preview, preview grid and live box) ----------
@@ -916,10 +924,14 @@ function getShownTimer() {
 
 function pushLive() {
   const shown = getShownTimer();
-  Store.setLive({
-    timer: shown,
-    elapsed: shown ? getElapsed(shown.id) : 0,
-    isRunning: shown ? !!runtime[shown.id].isRunning : false
+  fetch('/api/live', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      timer: shown,
+      elapsed: shown ? getElapsed(shown.id) : 0,
+      isRunning: shown ? !!runtime[shown.id].isRunning : false
+    })
   }).catch(() => {});
 }
 
@@ -1258,8 +1270,9 @@ function tick() {
 async function showMirrorInfo() {
   const el = document.getElementById('mirror-info');
   try {
-    const n = await Store.network();
-    if (!n) return;
+    const res = await fetch('/api/network');
+    if (!res.ok) return;
+    const n = await res.json();
     const urls = [n.hostname, ...n.addresses].map(h => `http://${h}:${n.port}/output.html`);
     el.innerHTML = 'Second screen — open on the other computer: <b>' + escapeHtml(urls[0]) + '</b>' +
       (urls.length > 1 ? '<br>or ' + urls.slice(1).map(escapeHtml).join(' · ') : '');
