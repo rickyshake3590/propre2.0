@@ -80,6 +80,11 @@
       const timers = read(TIMERS_KEY, []);
       const timer = timers.find(t => t.id === id);
       if (!timer) throw new Error('Timer not found');
+      if ('name' in payload) {
+        const name = String(payload.name).trim();
+        if (!name) throw new Error('Timer name is required');
+        timer.name = name;
+      }
       if ('duration_seconds' in payload) {
         if (!(payload.duration_seconds >= 1)) throw new Error('Duration must be at least 1 second');
         timer.duration_seconds = payload.duration_seconds;

@@ -278,6 +278,13 @@ sub route {
         my $body = parse_body($rawbody) or return err(400, 'Invalid JSON');
 
         my %set;
+        if (exists $body->{name}) {
+            my $name = $body->{name};
+            return err(400, 'Timer name is required')
+                if !defined $name || ref $name || $name =~ /^\s*$/;
+            $name =~ s/^\s+|\s+$//g;
+            $set{name} = $name;
+        }
         if (exists $body->{duration_seconds}) {
             my $d = parse_int($body->{duration_seconds});
             return err(400, 'Duration must be at least 1 second') if !defined $d || $d < 1;

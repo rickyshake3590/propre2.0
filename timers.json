@@ -1,5 +1,5 @@
 {
-   "next_id" : 33,
+   "next_id" : 34,
    "timers" : [
       {
          "colour" : "red",
@@ -25,7 +25,7 @@
          "show_title" : 1,
          "size" : "large",
          "type" : "countdown",
-         "updated_at" : "2026-09-24 12:51:56"
+         "updated_at" : "2026-10-30 11:42:37"
       },
       {
          "colour" : "white",
@@ -52,19 +52,6 @@
          "size" : "large",
          "type" : "countdown",
          "updated_at" : "2026-10-01 15:11:35"
-      },
-      {
-         "colour" : "white",
-         "created_at" : "2026-10-09 14:13:52",
-         "duration_seconds" : 180,
-         "id" : 11,
-         "name" : "3MOF",
-         "position" : "bottom-right",
-         "show_current_time" : 0,
-         "show_title" : 0,
-         "size" : "small",
-         "type" : "countdown",
-         "updated_at" : "2026-10-09 14:13:52"
       },
       {
          "colour" : "red",
@@ -104,6 +91,19 @@
          "size" : "large",
          "type" : "altar-call",
          "updated_at" : "2026-10-22 13:53:55"
+      },
+      {
+         "colour" : "white",
+         "created_at" : "2026-10-30 11:23:26",
+         "duration_seconds" : 0,
+         "id" : 33,
+         "name" : "Blank",
+         "position" : "middle-center",
+         "show_current_time" : 0,
+         "show_title" : 1,
+         "size" : "large",
+         "type" : "blank",
+         "updated_at" : "2026-10-30 11:23:26"
       }
    ]
 }

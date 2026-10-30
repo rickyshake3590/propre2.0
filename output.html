@@ -33,7 +33,8 @@
     overflow: hidden;
     font-family: 'Big Noodle Tilting', monospace;
   }
-  .scene-inner { height: 100%; padding: 0; display: flex; flex-direction: column; }
+  .scene-inner { height: 100%; padding: 0; display: flex; flex-direction: column; transition: opacity 0.25s ease; }
+  .scene-inner.is-fading { opacity: 0; }
   .scene-name { line-height: 0.85; white-space: nowrap; color: #fff; margin-bottom: 1cqh; font-family: Helvetica, Arial, sans-serif; font-weight: 700; }
   .scene-clock { line-height: 0.85; white-space: nowrap; color: #8a8a8a; margin-top: 1cqh; font-variant-numeric: tabular-nums; }
   .scene-value { line-height: 0.85; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -62,6 +63,10 @@ const COLOUR_MAP = { white: '#eaeaea', yellow: '#FFD700', red: '#ff1414' };
 
 let live = null;
 let fetchedAt = 0;
+const LIVE_FADE_MS = 250;
+let paintedId = null;   // id of the timer currently on screen
+let paintedKey = '';    // layout of the timer on screen; the markup is rebuilt only when this changes
+let fadeTimer = null;   // pending switch while the text is faded out
 
 function formatTime(totalSeconds) {
   totalSeconds = Math.max(0, Math.floor(totalSeconds));
@@ -88,17 +93,27 @@ async function poll() {
   } catch (e) {}
 }
 
-function render() {
+// Blank slides show nothing, so they count as no timer
+function displayedTimer() {
+  return live && live.timer && live.timer.type !== 'blank' ? live.timer : null;
+}
+
+// The markup is only rebuilt when the timer's layout changes; the value and clock are updated in place each frame
+function paint(t) {
   const scene = document.getElementById('scene');
   const inner = document.getElementById('scene-inner');
 
-  if (!live || !live.timer || live.timer.type === 'blank') {
+  if (!t) {
     inner.innerHTML = '';
-  } else {
-    const t = live.timer;
-    const elapsed = live.elapsed + (live.isRunning ? (performance.now() - fetchedAt) / 1000 : 0);
-    const value = t.type === 'countup' ? elapsed : Math.max(0, t.duration_seconds - elapsed);
+    paintedKey = '';
+    return;
+  }
+  const elapsed = live.elapsed + (live.isRunning ? (performance.now() - fetchedAt) / 1000 : 0);
+  const value = formatTime(t.type === 'countup' ? elapsed : Math.max(0, t.duration_seconds - elapsed));
 
+  const key = [t.id, t.name, t.show_title, t.colour, t.size, t.position, t.show_current_time].join('|');
+  if (key !== paintedKey) {
+    paintedKey = key;
     const alignV = t.position.startsWith('top') ? 'flex-start' : (t.position.startsWith('bottom') ? 'flex-end' : 'center');
     const alignH = t.position.endsWith('left') ? 'flex-start' : (t.position.endsWith('right') ? 'flex-end' : 'center');
     const textAlign = alignH === 'flex-start' ? 'left' : (alignH === 'flex-end' ? 'right' : 'center');
@@ -109,9 +124,35 @@ function render() {
     inner.style.textAlign = textAlign;
     inner.innerHTML = `
       ${t.show_title ? `<div class="scene-name">${escapeHtml(t.name)}</div>` : ''}
-      <div class="scene-value" style="color:${COLOUR_MAP[t.colour] || '#eaeaea'}">${formatTime(value)}</div>
+      <div class="scene-value" style="color:${COLOUR_MAP[t.colour] || '#eaeaea'}">${value}</div>
       ${t.show_current_time ? `<div class="scene-clock">${nowHHMM()}</div>` : ''}`;
+  } else {
+    inner.querySelector('.scene-value').textContent = value;
+    const clock = inner.querySelector('.scene-clock');
+    if (clock) clock.textContent = nowHHMM();
   }
+}
+
+// When the shown timer changes, the text fades out, switches, then fades back in
+function render() {
+  const inner = document.getElementById('scene-inner');
+  const shown = displayedTimer();
+  const shownId = shown ? shown.id : null;
+
+  if (shownId !== paintedId && fadeTimer === null) {
+    inner.classList.add('is-fading');
+    fadeTimer = setTimeout(() => {
+      fadeTimer = null;
+      const next = displayedTimer();
+      paintedId = next ? next.id : null;
+      paint(next);
+      // Paint while still faded out, then reflow so removing the class fades the new text in
+      void inner.offsetWidth;
+      inner.classList.remove('is-fading');
+    }, LIVE_FADE_MS);
+  }
+  // During the fade-out the last text is left as it is
+  if (fadeTimer === null) paint(shown);
   requestAnimationFrame(render);
 }
 

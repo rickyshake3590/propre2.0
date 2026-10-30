@@ -282,6 +282,16 @@
     border: 1px solid var(--accent); border-radius: 4px; padding: 0 6px; outline: none;
   }
   .row-time-input.invalid { border-color: var(--run-red); }
+  /* Timer name: click to edit in place (preview footer and control row) */
+  .editable-name { cursor: text; border-bottom: 1px dashed transparent; }
+  .editable-name:hover { border-bottom-color: #777; }
+  .name-input {
+    display: block; width: 100%; box-sizing: border-box; font: inherit; color: #fff; text-align: inherit;
+    background: #0d0d0d; border: 1px solid var(--accent); border-radius: 4px; padding: 1px 4px; outline: none;
+  }
+  /* When the timer shown changes, only the text fades out and back in; the scene outline stays put */
+  .live-stage .scene-inner, .live-stage .live-placeholder { transition: opacity 0.25s ease; }
+  .live-stage.is-fading .scene-inner, .live-stage.is-fading .live-placeholder { opacity: 0; }
   /* Right-click menu */
   #ctx-menu {
     position: fixed; z-index: 1000; display: none; min-width: 170px;
@@ -293,6 +303,8 @@
     font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--text); cursor: pointer; user-select: none;
   }
   .ctx-item:hover { background: #2a2a2a; color: var(--accent); }
+  .ctx-item.ctx-danger { color: #e07070; }
+  .ctx-item.ctx-danger:hover { background: #4a1c1c; color: #e07070; }
   .ctx-item svg { width: 14px; height: 14px; }
   .control-row .row-stats { display: flex; gap: 14px; margin-top: 6px; font-size: 10px; color: var(--text-dim); }
   .control-row .row-stats b { display: block; font-weight: normal; color: #6d6d6d; font-variant-numeric: tabular-nums; }
@@ -419,8 +431,10 @@
   <!-- RIGHT COLUMN — Live + Controls -->
   <div class="right-panel">
     <div class="live-output-box" id="live-output-box">
-      <div class="live-placeholder" id="live-placeholder">Select or start a timer</div>
-      <div id="live-content" style="display:none;"></div>
+      <div class="live-stage" id="live-stage">
+        <div class="live-placeholder" id="live-placeholder">Select or start a timer</div>
+        <div id="live-content" style="display:none;"></div>
+      </div>
     </div>
 
     <div class="control-list">
@@ -445,6 +459,7 @@
 <!-- Right-click menu for timer cards / rows -->
 <div id="ctx-menu">
   <div class="ctx-item" id="ctx-duplicate"></div>
+  <div class="ctx-item ctx-danger" id="ctx-delete"></div>
 </div>
 
 <script>
@@ -482,6 +497,12 @@ let selectedId = null;
 let editingId = null;      // control row whose timer length is being edited
 let editingValue = '';
 let rerendering = false;   // true while the control list is being rebuilt (ignores the blur that causes)
+let editingName = null;    // { id, where: 'preview' | 'row' } while a timer name is being typed
+let nameEditValue = '';
+let liveCleared = false;   // set by clicking away; the live box stays empty until a timer is selected or started
+let liveId = null;         // id of the timer currently painted in the live box
+let liveSwapTimer = null;  // pending fade-out before the live box switches timer
+const LIVE_FADE_MS = 250;
 
 // ---------- Utility ----------
 function formatTime(totalSeconds) {
@@ -655,13 +676,16 @@ function updateFormPreview() {
 
 document.getElementById('f-name').addEventListener('input', updateFormPreview);
 // The colon is always shown and digits fill in from the right, so typing 300 gives 03:00
-function formatDurationInput(e) {
-  const typed = e.target.value.replace(/\D/g, '');
-  if (!typed) { e.target.value = ''; return; }
+function withColon(value) {
+  const typed = value.replace(/\D/g, '');
+  if (!typed) return '';
   const digits = typed.replace(/^0+/, '').slice(-5) || '0';
   const seconds = digits.slice(-2).padStart(2, '0');
   const minutes = digits.slice(0, -2) || '0';
-  e.target.value = `${minutes.padStart(2, '0')}:${seconds}`;
+  return `${minutes.padStart(2, '0')}:${seconds}`;
+}
+function formatDurationInput(e) {
+  e.target.value = withColon(e.target.value);
 }
 document.getElementById('f-duration').addEventListener('input', formatDurationInput);
 document.getElementById('f-duration').addEventListener('input', updateFormPreview);
@@ -784,6 +808,7 @@ document.getElementById('add-blank-btn').addEventListener('click', async () => {
 let ctxId = null;
 const ctxMenu = document.getElementById('ctx-menu');
 document.getElementById('ctx-duplicate').innerHTML = ICONS.copy + '<span>Duplicate</span>';
+document.getElementById('ctx-delete').innerHTML = ICONS.trash + '<span>Delete</span>';
 
 function hideCtxMenu() { ctxMenu.style.display = 'none'; ctxId = null; }
 
@@ -809,6 +834,13 @@ document.getElementById('ctx-duplicate').addEventListener('click', () => {
   const id = ctxId;
   hideCtxMenu();
   if (id !== null) duplicateTimer(id);
+});
+
+// Same confirmation and cleanup as the trash button on the control row
+document.getElementById('ctx-delete').addEventListener('click', () => {
+  const id = ctxId;
+  hideCtxMenu();
+  if (id !== null) removeTimer(id);
 });
 
 // Creates a copy with the same settings and places it right after the original
@@ -840,6 +872,7 @@ async function duplicateTimer(id) {
 // ---------- Selection ----------
 function selectTimer(id) {
   selectedId = id;
+  liveCleared = false;
   // Countup timers autostart the first time they are opened
   const t = timers.find(tm => tm.id === id);
   const r = runtime[id];
@@ -869,6 +902,7 @@ function startTimer(id) {
   const timer = timers.find(t => t.id === id);
   const r = runtime[id];
   const wasPaused = r.isPaused;
+  liveCleared = false;
   r.isRunning = true;
   r.isPaused = false;
   r.startedAt = performance.now();
@@ -933,10 +967,14 @@ function renderAll() {
   renderControlRows();
   renderLiveBox();
   pushLive();
+  // Re-rendering replaces the name input, so put the cursor back in it
+  const nameInput = document.querySelector('.name-input');
+  if (nameInput && document.activeElement !== nameInput) nameInput.focus();
 }
 
 // The timer shown in the live box is also what output.html displays
 function getShownTimer() {
+  if (liveCleared) return null;
   let shown = null;
   if (selectedId !== null) shown = timers.find(t => t.id === selectedId) || null;
   if (!shown) shown = timers.find(t => runtime[t.id] && runtime[t.id].isRunning) || null;
@@ -961,15 +999,17 @@ function renderPreviews() {
   const el = document.getElementById('preview-list');
   const scroll = el.scrollTop;
   if (timers.length === 0) { el.innerHTML = '<div class="empty-state">No timers created yet.</div>'; return; }
+  rerendering = true;
   el.innerHTML = timers.map(t => `
-    <div class="preview-card ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}" draggable="true" onclick="selectTimer(${t.id})">
+    <div class="preview-card ${selectedId === t.id ? 'selected' : ''}" data-id="${t.id}" draggable="${isNameEditing(t, 'preview') ? 'false' : 'true'}" onclick="selectTimer(${t.id})">
       ${sceneHTML({
         name: !isBlank(t) && t.show_title ? t.name : '',
         value: isBlank(t) ? '' : formatTime(getDisplayValue(t)),
         colour: t.colour, size: t.size, position: t.position, showTime: !isBlank(t) && !!t.show_current_time,
       })}
-      <div class="preview-footer" style="color:#fff">${escapeHtml(t.name)}</div>
+      <div class="preview-footer" style="color:#fff">${nameHTML(t, 'preview')}</div>
     </div>`).join('');
+  setTimeout(() => { rerendering = false; }, 0);
   timers.forEach(t => {
     const card = el.querySelector(`.preview-card[data-id="${t.id}"]`);
     if (card) applyRunColour(card, getRunColour(t));
@@ -1021,7 +1061,7 @@ function renderControlRows() {
           <button class="move-btn" title="Move down" ${i === timers.length - 1 ? 'disabled' : ''} onclick="moveTimerBy(${t.id}, 1)">${ICONS.down}</button>
         </div>
         <div class="row-info" onclick="selectTimer(${t.id})">
-          <div class="row-name" style="color:#fff">${escapeHtml(t.name)}</div>
+          <div class="row-name" style="color:#fff">${nameHTML(t, 'row')}</div>
           <div class="row-state">${isBlank(t) ? 'Blank slide · Shows nothing' : typeLabel(t) + ' · ' + state.charAt(0).toUpperCase() + state.slice(1)}</div>
           ${timeCellHTML(t)}
           <div class="row-stats">${rowStatsHTML(t)}</div>
@@ -1045,6 +1085,60 @@ function renderControlRows() {
   el.scrollTop = scroll;
 }
 
+// ---------- Edit a timer's name from the preview footer or the control row ----------
+// `where` says which of the two places is being edited, so only that one turns into a text box
+function isNameEditing(t, where) {
+  return !!editingName && editingName.id === t.id && editingName.where === where;
+}
+
+function nameHTML(t, where) {
+  if (isNameEditing(t, where)) {
+    return `<input class="name-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" value="${escapeHtml(nameEditValue).replace(/"/g, '&quot;')}"
+      oninput="nameEditValue = this.value"
+      onkeydown="nameKey(event, ${t.id})"
+      onblur="commitName(${t.id}, true)"
+      onclick="event.stopPropagation()">`;
+  }
+  return `<span class="editable-name" title="Click to rename" onclick="event.stopPropagation(); startNameEdit(${t.id}, '${where}')">${escapeHtml(t.name)}</span>`;
+}
+
+function startNameEdit(id, where) {
+  const t = timers.find(x => x.id === id);
+  if (!t) return;
+  editingName = { id, where };
+  nameEditValue = t.name;
+  renderAll();
+  const input = document.querySelector('.name-input');
+  if (input) input.select();
+}
+
+function nameKey(e, id) {
+  if (e.key === 'Enter') { e.preventDefault(); commitName(id, false); }
+  else if (e.key === 'Escape') { e.preventDefault(); cancelName(); }
+}
+
+function cancelName() {
+  editingName = null;
+  renderAll();
+}
+
+async function commitName(id, fromBlur) {
+  if (!editingName || editingName.id !== id || (fromBlur && rerendering)) return;
+  const t = timers.find(x => x.id === id);
+  const name = nameEditValue.trim();
+  editingName = null;
+  if (!t || !name || name === t.name) return renderAll();
+  const oldName = t.name;
+  try {
+    const updated = await updateTimer(id, { name });
+    t.name = updated.name;
+    addLog(t.name, 'RENAMED', `from ${oldName}`);
+  } catch (err) {
+    alert(err.message);
+  }
+  renderAll();
+}
+
 // ---------- Edit a timer's length from the control list ----------
 // Accepts H:MM:SS, MM:SS, or just a number (minutes). Returns NaN if invalid.
 function parseEditDuration(str) {
@@ -1062,7 +1156,7 @@ function timeCellHTML(t) {
   if (!isCountdown(t)) return `<div class="row-time" style="color:${colour}">${formatTime(getDisplayValue(t))}</div>`;
   if (editingId === t.id) {
     return `<input class="row-time-input" type="text" maxlength="8" placeholder="MM:SS" spellcheck="false" autocomplete="off"
-      oninput="editingValue = this.value; this.classList.remove('invalid')"
+      oninput="editingValue = withColon(this.value); this.value = editingValue; this.classList.remove('invalid')"
       onkeydown="editKey(event, ${t.id})"
       onblur="commitEdit(${t.id}, true)"
       onclick="event.stopPropagation()">`;
@@ -1222,27 +1316,69 @@ function applySavedOrder() {
   timers.sort((a, b) => rank(a.id) - rank(b.id));
 }
 
+// Fades the live box out, switches to the timer now shown, then fades back in.
+// Runs every frame, so the paint always uses liveId and only the switch is timed.
 function renderLiveBox() {
+  const stage = document.getElementById('live-stage');
+  const shown = getShownTimer();
+  const shownId = shown ? shown.id : null;
+
+  if (shownId !== liveId && liveSwapTimer === null) {
+    stage.classList.add('is-fading');
+    liveSwapTimer = setTimeout(() => {
+      liveSwapTimer = null;
+      const next = getShownTimer();
+      liveId = next ? next.id : null;
+      // Paint the new timer while still faded out, then reflow so the removal of the class fades it in
+      paintLiveBox(timers.find(t => t.id === liveId) || null);
+      void stage.offsetWidth;
+      stage.classList.remove('is-fading');
+    }, LIVE_FADE_MS);
+  }
+
+  paintLiveBox(timers.find(t => t.id === liveId) || null);
+}
+
+// The scene markup is only rebuilt when its layout changes; the value and clock are updated in place each frame,
+// so the text keeps the same elements and can fade while the outline stays put.
+function paintLiveBox(shown) {
   const placeholder = document.getElementById('live-placeholder');
   const content = document.getElementById('live-content');
-
-  const shown = getShownTimer();
 
   if (!shown) {
     placeholder.style.display = 'block';
     content.style.display = 'none';
-  } else {
-    placeholder.style.display = 'none';
-    content.style.display = 'block';
+    content.dataset.key = '';
+    return;
+  }
+  placeholder.style.display = 'none';
+  content.style.display = 'block';
 
+  const showTime = !isBlank(shown) && !!shown.show_current_time;
+  const key = [shown.id, shown.name, shown.show_title, shown.colour, shown.size, shown.position, showTime, isBlank(shown)].join('|');
+  if (content.dataset.key !== key) {
+    content.dataset.key = key;
     content.innerHTML = sceneHTML({
       name: !isBlank(shown) && shown.show_title ? shown.name : '',
       value: isBlank(shown) ? '' : formatTime(getDisplayValue(shown)),
-      colour: shown.colour, size: shown.size, position: shown.position, showTime: !isBlank(shown) && !!shown.show_current_time,
+      colour: shown.colour, size: shown.size, position: shown.position, showTime,
     });
+  } else {
+    content.querySelector('.scene-value').textContent = isBlank(shown) ? '' : formatTime(getDisplayValue(shown));
+    const clock = content.querySelector('.scene-clock');
+    if (clock) clock.textContent = nowHHMM();
   }
-
 }
+
+// Clicking away from every timer takes the timer out of the live box; it keeps running in the controls.
+// Uses click (not mousedown) so an open name edit has already committed on blur.
+document.addEventListener('click', e => {
+  if (e.target.closest('.preview-card, .control-row, #live-output-box, #ctx-menu')) return;
+  if (!getShownTimer()) return;
+  selectedId = null;
+  liveCleared = true;
+  renderAll();
+});
 
 // ---------- Animation loop ----------
 // Patches text/colour of running timers each frame without rebuilding
