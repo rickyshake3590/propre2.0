@@ -29,7 +29,7 @@ my @POSITIONS = qw(top-left top-center top-right middle-left middle-center middl
                    bottom-left bottom-center bottom-right);
 my @SIZES     = qw(extra-small small medium large);
 my @COLOURS   = qw(white yellow red);
-my %STATIC_TYPES = ('.html' => 'text/html; charset=utf-8', '.ttf' => 'font/ttf');
+my %STATIC_TYPES = ('.html' => 'text/html; charset=utf-8', '.ttf' => 'font/ttf', '.js' => 'application/javascript; charset=utf-8');
 my %REASON = (200 => 'OK', 201 => 'Created', 400 => 'Bad Request', 403 => 'Forbidden',
               404 => 'Not Found', 500 => 'Internal Server Error');
 
