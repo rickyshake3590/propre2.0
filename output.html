@@ -73,7 +73,8 @@ function formatTime(totalSeconds) {
   totalSeconds = Math.max(0, Math.floor(totalSeconds));
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  // No leading zero on minutes: 5:00 shows as "5:00", 12:00 as "12:00"
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function escapeHtml(str) {
