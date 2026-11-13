@@ -46,6 +46,12 @@ open_output() {
     if [ -x "$exe" ]; then
       if [ -n "$geom" ]; then
         read -r x y w h <<< "$geom"
+        # Close an output window left from an earlier run, so the new one is the only output window
+        osascript -e "if application \"$app\" is running then tell application \"$app\" to close (every window whose URL of active tab contains \"output.html\")" >/dev/null 2>&1
+        sleep 1
+        # A new profile for every launch: Chrome hands a launch to a running instance that uses the same profile,
+        # and that instance keeps its old window position, so the output would stay on the wrong screen
+        PROFILE="$(mktemp -d "${TMPDIR:-/tmp}/propre-output.XXXXXX")"
         nohup "$exe" --kiosk --user-data-dir="$PROFILE" --no-first-run \
           --window-position="$x,$y" --window-size="$w,$h" "$url" >/dev/null 2>&1 &
         # Wait for the output window itself (found by its address), then move it onto the extended display
