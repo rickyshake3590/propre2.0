@@ -308,6 +308,10 @@
   .ctx-item svg { width: 14px; height: 14px; }
   .control-row .row-stats { display: flex; gap: 14px; margin-top: 6px; font-size: 10px; color: var(--text-dim); }
   .control-row .row-stats b { display: block; font-weight: normal; color: #6d6d6d; font-variant-numeric: tabular-nums; }
+  /* Progress bar: grey track, blue fill for the time that has passed */
+  .control-row .row-stats { align-items: center; min-height: 8px; }
+  .row-progress { flex: 1 1 auto; height: 8px; background: #3d3d3d; border-radius: 4px; overflow: hidden; }
+  .row-progress-fill { height: 100%; width: 0; background: #3b82f6; border-radius: 4px; }
 
   .row-icons { display: flex; gap: 4px; flex-shrink: 0; }
   .icon-btn {
@@ -321,24 +325,58 @@
   .icon-btn.icon-danger:hover { background: #4a1c1c; }
   .icon-btn svg { width: 16px; height: 16px; }
 
-  /* ===== TIMER LOG (full width, bottom) ===== */
-  .timer-log {
+  /* ===== BOTTOM ROW: timer log (left column) and timer editor (middle column) ===== */
+  .bottom-row {
     flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 300px 1fr 360px;
+    height: 320px;
     border-top: 1px solid var(--panel-border);
     background: var(--panel);
-    max-height: 200px;
+  }
+  .timer-log {
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--panel-border);
   }
   .timer-log-header {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 24px; border-bottom: 1px solid var(--panel-border);
+    padding: 12px 18px; border-bottom: 1px solid var(--panel-border);
   }
   .timer-log-header .panel-title { margin-bottom: 0; }
-  .timer-log-entries { overflow-y: auto; padding: 8px 24px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .timer-log-entries { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 18px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
   .timer-log-entries .log-entry { color: var(--text-dim); }
   .timer-log-entries .log-entry .log-time { color: var(--accent); margin-right: 6px; }
   .timer-log-entries .log-entry .log-name { color: var(--text); font-weight: bold; }
+
+  /* Timer editor: shown in the middle column while a timer is selected */
+  .timer-editor {
+    background: #0d0d0d;
+    border-right: 1px solid var(--panel-border);
+    padding: 12px 18px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .editor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .editor-head .panel-title { margin: 0; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .editor-head .btn { padding: 7px 12px; }
+  .editor-head .btn-primary { width: auto; margin-top: 0; }
+  .editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .editor-grid .span-2 { grid-column: 1 / -1; }
+  .editor-grid .field { margin-bottom: 8px; }
+  .editor-grid .check-stack { display: flex; flex-direction: column; gap: 6px; justify-content: center; font-size: 13px; color: var(--text); }
+  .editor-grid .check-stack label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .editor-grid .check-stack input { width: auto; }
+  .editor-empty { text-align: left; padding: 24px 0; }
+  .editor-form { padding: 12px 14px 4px; }
+  .editor-form.create-form { background: var(--card-bg); }
+
+  @media (max-width: 1000px) {
+    .bottom-row { grid-template-columns: 1fr; height: auto; }
+    .timer-log { max-height: 240px; border-right: none; border-bottom: 1px solid var(--panel-border); }
+    .timer-editor { border-right: none; }
+  }
 </style>
 </head>
 <body>
@@ -447,13 +485,18 @@
 
 </div>
 
-<!-- TIMER LOG — full width footer -->
-<div class="timer-log">
-  <div class="timer-log-header">
-    <div class="panel-title">Timer Log</div>
-    <button class="btn btn-secondary" id="clear-log-btn" style="padding:5px 10px; font-size:11px;">Clear</button>
+<!-- BOTTOM ROW — timer log in the left column, timer editor in the middle -->
+<div class="bottom-row">
+  <div class="timer-log">
+    <div class="timer-log-header">
+      <div class="panel-title">Timer Log</div>
+      <button class="btn btn-secondary" id="clear-log-btn" style="padding:5px 10px; font-size:11px;">Clear</button>
+    </div>
+    <div class="timer-log-entries" id="log-entries"></div>
   </div>
-  <div class="timer-log-entries" id="log-entries"></div>
+
+  <!-- Filled in by renderEditor() when a timer is selected -->
+  <div class="timer-editor" id="timer-editor"></div>
 </div>
 
 <!-- Right-click menu for timer cards / rows -->
@@ -951,6 +994,7 @@ async function removeTimer(id) {
 function renderAll() {
   renderPreviews();
   renderControlRows();
+  renderEditor();
   renderLiveBox();
   pushLive();
   // Re-rendering replaces the name input, so put the cursor back in it
@@ -1007,21 +1051,18 @@ function fmtDur(sec) {
   return m ? `${m}m ${String(r).padStart(2, '0')}s` : `${r}s`;
 }
 
-// Stats shown under each control row (updated every frame by tick())
-function rowStats(t) {
-  if (isBlank(t)) return [];
-  const r = runtime[t.id];
-  const elapsed = getElapsed(t.id);
-  const started = r && r.startedClock ? r.startedClock : '--:--';
-  const progress = Math.min(100, Math.round(elapsed / t.duration_seconds * 100));
-  if (isCountdown(t)) {
-    return [['Set', fmtDur(t.duration_seconds)], ['Progress', progress + '%'], ['Elapsed', fmtDur(elapsed)]];
-  }
-  return [['Started', started], ['Elapsed', fmtDur(elapsed)]];
-}
-
+// Stats under each control row (updated every frame by tick()).
+// Countdown and altar call timers show a progress bar: grey while not started, blue for the time passed.
+// Countup timers have no length, so there is nothing to fill; they keep Started and Elapsed.
 function rowStatsHTML(t) {
-  return rowStats(t).map(([k, v]) => `<div>${k}:<b>${v}</b></div>`).join('');
+  if (isBlank(t)) return '';
+  if (isCountdown(t)) {
+    const fraction = Math.min(1, getElapsed(t.id) / t.duration_seconds);
+    return `<div class="row-progress" title="${Math.round(fraction * 100)}% elapsed"><div class="row-progress-fill" style="width:${(fraction * 100).toFixed(2)}%"></div></div>`;
+  }
+  const r = runtime[t.id];
+  const started = r && r.startedClock ? r.startedClock : '--:--';
+  return `<div>Started:<b>${started}</b></div><div>Elapsed:<b>${fmtDur(getElapsed(t.id))}</b></div>`;
 }
 
 function renderControlRows() {
@@ -1219,6 +1260,197 @@ function limitVisibleRows() {
   el.style.maxHeight = (bottom + 4) + 'px';
 }
 
+// ---------- Timer editor (bottom middle column) ----------
+// Opens for the selected timer and uses the same inputs as the Create Timer form.
+// It is only rebuilt when a different timer is selected, so typing is not lost when other parts re-render.
+let editorId = null; // timer whose settings are currently in the editor form
+const EDIT_FORCED_COLOUR = { countup: 'red', 'altar-call': 'yellow' };
+
+function renderEditor(force) {
+  const el = document.getElementById('timer-editor');
+  const t = selectedId === null ? null : timers.find(x => x.id === selectedId);
+  if (!t || isBlank(t)) {
+    editorId = null;
+    el.innerHTML = `<div class="empty-state editor-empty">${t ? 'Blank slides have no settings to edit.' : 'Select a timer to edit its settings.'}</div>`;
+    return;
+  }
+  if (editorId === t.id && !force) return;
+  editorId = t.id;
+
+  el.innerHTML = `
+    <form class="create-form editor-form" id="edit-form">
+      <div class="editor-head">
+        <div class="panel-title" title="${escapeHtml(t.name)}">Edit: ${escapeHtml(t.name)}</div>
+        <button type="button" class="btn btn-secondary" id="edit-revert">Revert</button>
+        <button type="submit" form="edit-form" class="btn btn-primary">Save</button>
+        <button type="button" class="icon-btn" id="edit-close" title="Close editor" style="font-size:18px; line-height:1;">&times;</button>
+      </div>
+      <div class="editor-grid">
+        <div class="field span-2">
+          <label>Name</label>
+          <input type="text" id="e-name" maxlength="40" required>
+        </div>
+        <div class="field">
+          <label>Duration (MM:SS)</label>
+          <input type="text" id="e-duration" placeholder="MM:SS" inputmode="numeric" pattern="\\d{1,3}:[0-5]\\d" maxlength="6">
+        </div>
+        <div class="field">
+          <label>Type</label>
+          <select id="e-type">
+            <option value="countdown">Countdown</option>
+            <option value="countup">Countup</option>
+            <option value="altar-call">Altar Call</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Position</label>
+          <select id="e-position">
+            <option value="top-left">Top Left</option>
+            <option value="top-center">Top Center</option>
+            <option value="top-right">Top Right</option>
+            <option value="middle-left">Middle Left</option>
+            <option value="middle-center">Middle Center</option>
+            <option value="middle-right">Middle Right</option>
+            <option value="bottom-left">Bottom Left</option>
+            <option value="bottom-center">Bottom Center</option>
+            <option value="bottom-right">Bottom Right</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Size</label>
+          <select id="e-size">
+            <option value="extra-small">Extra Small</option>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Colour</label>
+          <select id="e-colour">
+            <option value="white">White</option>
+            <option value="yellow">Yellow</option>
+            <option value="red">Red</option>
+          </select>
+        </div>
+        <div class="field">
+          <div class="check-stack">
+            <label><input type="checkbox" id="e-show-title"> Show timer name</label>
+            <label><input type="checkbox" id="e-show-current-time"> Show current time</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-error" id="edit-error"></div>
+    </form>`;
+
+  document.getElementById('e-name').value = t.name;
+  document.getElementById('e-duration').value = isCountdown(t) ? formatTime(t.duration_seconds) : '';
+  document.getElementById('e-type').value = t.type;
+  document.getElementById('e-position').value = t.position;
+  document.getElementById('e-size').value = t.size;
+  document.getElementById('e-colour').value = t.colour;
+  document.getElementById('e-show-title').checked = !!t.show_title;
+  document.getElementById('e-show-current-time').checked = !!t.show_current_time;
+  updateEditDurationField();
+}
+
+// Countup has no length, so the duration field is disabled (same rule as the Create form)
+function updateEditDurationField() {
+  const type = document.getElementById('e-type').value;
+  const input = document.getElementById('e-duration');
+  const off = type === 'countup';
+  input.disabled = off;
+  input.required = !off;
+  input.closest('.field').classList.toggle('is-disabled', off);
+  if (off) input.value = '';
+}
+
+// Same forcing as the Create form: Countup and Altar Call set the colour, Altar Call also sets name, position and size
+function onEditTypeChange() {
+  const type = document.getElementById('e-type').value;
+  if (EDIT_FORCED_COLOUR[type]) document.getElementById('e-colour').value = EDIT_FORCED_COLOUR[type];
+  if (type === 'altar-call') {
+    document.getElementById('e-name').value = 'Altar Call';
+    document.getElementById('e-position').value = 'middle-center';
+    document.getElementById('e-size').value = 'large';
+  }
+  updateEditDurationField();
+}
+
+async function saveEdit(e) {
+  e.preventDefault();
+  const t = timers.find(x => x.id === editorId);
+  const errorEl = document.getElementById('edit-error');
+  errorEl.style.display = 'none';
+  if (!t) return;
+
+  const type = document.getElementById('e-type').value;
+  const payload = {
+    name: document.getElementById('e-name').value.trim(),
+    type,
+    duration_seconds: type === 'countup' ? 0 : parseDuration(document.getElementById('e-duration').value),
+    position: document.getElementById('e-position').value,
+    size: document.getElementById('e-size').value,
+    colour: document.getElementById('e-colour').value,
+    show_title: document.getElementById('e-show-title').checked,
+    show_current_time: document.getElementById('e-show-current-time').checked
+  };
+
+  const showError = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  if (!payload.name) return showError('Timer name is required.');
+  if (type !== 'countup' && (!Number.isFinite(payload.duration_seconds) || payload.duration_seconds < 1)) {
+    return showError('Enter a duration as MM:SS (at least 00:01).');
+  }
+
+  // Compare against the stored timer so only real changes are saved and logged
+  const labels = { name: 'name', type: 'type', duration_seconds: 'length', position: 'position', size: 'size',
+                   colour: 'colour', show_title: 'show name', show_current_time: 'show time' };
+  const norm = (k, v) => (k === 'show_title' || k === 'show_current_time') ? (v ? 1 : 0) : v;
+  const changed = Object.keys(labels).filter(k => norm(k, t[k]) !== norm(k, payload[k])).map(k => labels[k]);
+  if (changed.length === 0) return renderEditor(true);
+
+  // Changing the length or type restarts the timer, so confirm first if it is running or paused
+  const restarts = payload.duration_seconds !== t.duration_seconds || type !== t.type;
+  const r = runtime[t.id];
+  if (restarts && r && (r.isRunning || r.isPaused) && !confirm(`Save changes to "${t.name}"? This resets the timer.`)) return;
+
+  try {
+    const updated = await updateTimer(t.id, payload);
+    Object.assign(t, updated);
+    if (restarts) {
+      r.isRunning = false;
+      r.isPaused = false;
+      r.elapsedBase = 0;
+      r.startedClock = null;
+    }
+    addLog(t.name, 'EDITED', changed.join(', '));
+    renderAll();
+    renderEditor(true); // rebuild so the header and fields show the saved values
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+function closeEditor() {
+  selectedId = null;
+  liveCleared = true;
+  renderAll();
+}
+
+// Form events are handled on the container, because the form is rebuilt when a different timer is selected
+const timerEditorEl = document.getElementById('timer-editor');
+timerEditorEl.addEventListener('submit', saveEdit);
+timerEditorEl.addEventListener('change', e => {
+  if (e.target.id === 'e-type') onEditTypeChange();
+});
+timerEditorEl.addEventListener('input', e => {
+  if (e.target.id === 'e-duration') e.target.value = withColon(e.target.value);
+});
+timerEditorEl.addEventListener('click', e => {
+  if (e.target.closest('#edit-revert')) renderEditor(true);
+  else if (e.target.closest('#edit-close')) closeEditor();
+});
+
 // ---------- Control row reordering ----------
 let dragId = null;
 
@@ -1355,7 +1587,7 @@ function paintLiveBox(shown) {
 // Clicking away from every timer takes the timer out of the live box; it keeps running in the controls.
 // Uses click (not mousedown) so an open name edit has already committed on blur.
 document.addEventListener('click', e => {
-  if (e.target.closest('.preview-card, .control-row, #live-output-box, #ctx-menu')) return;
+  if (e.target.closest('.preview-card, .control-row, #live-output-box, #timer-editor, #ctx-menu')) return;
   if (!getShownTimer()) return;
   selectedId = null;
   liveCleared = true;
