@@ -276,6 +276,7 @@ sub route {
         return err(404, 'Not found') unless $path =~ m{^/api/timers/([^/]*)$};
         my $id = parse_int($1);
         my $body = parse_body($rawbody) or return err(400, 'Invalid JSON');
+        my $t = find_timer($id) or return err(404, 'Timer not found');
 
         my %set;
         if (exists $body->{name}) {
@@ -285,17 +286,42 @@ sub route {
             $name =~ s/^\s+|\s+$//g;
             $set{name} = $name;
         }
+        if (exists $body->{type}) {
+            my $type = $body->{type};
+            return err(400, 'Type must be one of: ' . join(', ', @TYPES)) unless in_list($type, @TYPES);
+            $set{type} = $type;
+        }
+        # Countup and blank slides have no length, so 0 is allowed for them; the other types need at least 1 second
+        my $type = exists $set{type} ? $set{type} : $t->{type};
         if (exists $body->{duration_seconds}) {
+            my $minimum = ($type eq 'countup' || $type eq 'blank') ? 0 : 1;
             my $d = parse_int($body->{duration_seconds});
-            return err(400, 'Duration must be at least 1 second') if !defined $d || $d < 1;
+            return err(400, "Duration must be at least $minimum second(s)") if !defined $d || $d < $minimum;
             $set{duration_seconds} = $d;
+        }
+        if (exists $body->{position}) {
+            return err(400, 'Position must be one of: ' . join(', ', @POSITIONS))
+                unless in_list($body->{position}, @POSITIONS);
+            $set{position} = $body->{position};
+        }
+        if (exists $body->{size}) {
+            return err(400, 'Size must be one of: ' . join(', ', @SIZES))
+                unless in_list($body->{size}, @SIZES);
+            $set{size} = $body->{size};
+        }
+        if (exists $body->{colour}) {
+            return err(400, 'Colour must be one of: ' . join(', ', @COLOURS))
+                unless in_list($body->{colour}, @COLOURS);
+            $set{colour} = $body->{colour};
         }
         if (exists $body->{show_title}) {
             $set{show_title} = $body->{show_title} ? 1 : 0;
         }
+        if (exists $body->{show_current_time}) {
+            $set{show_current_time} = $body->{show_current_time} ? 1 : 0;
+        }
         return err(400, 'No fields to update') unless %set;
 
-        my $t = find_timer($id) or return err(404, 'Timer not found');
         $t->{$_} = $set{$_} for keys %set;
         $t->{updated_at} = now_stamp();
         save();

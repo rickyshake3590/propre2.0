@@ -85,11 +85,17 @@
         if (!name) throw new Error('Timer name is required');
         timer.name = name;
       }
+      if ('type' in payload) timer.type = payload.type;
       if ('duration_seconds' in payload) {
-        if (!(payload.duration_seconds >= 1)) throw new Error('Duration must be at least 1 second');
+        const minimum = (timer.type === 'countup' || timer.type === 'blank') ? 0 : 1;
+        if (!(payload.duration_seconds >= minimum)) throw new Error(`Duration must be at least ${minimum} second(s)`);
         timer.duration_seconds = payload.duration_seconds;
       }
+      if ('position' in payload) timer.position = payload.position;
+      if ('size' in payload) timer.size = payload.size;
+      if ('colour' in payload) timer.colour = payload.colour;
       if ('show_title' in payload) timer.show_title = payload.show_title ? 1 : 0;
+      if ('show_current_time' in payload) timer.show_current_time = payload.show_current_time ? 1 : 0;
       timer.updated_at = new Date().toISOString();
       write(TIMERS_KEY, timers);
       return timer;

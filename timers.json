@@ -17,15 +17,15 @@
       {
          "colour" : "white",
          "created_at" : "2026-09-24 12:51:56",
-         "duration_seconds" : 60,
+         "duration_seconds" : 120,
          "id" : 5,
-         "name" : "Test Timer",
+         "name" : "Trial Timer",
          "position" : "middle-center",
          "show_current_time" : 0,
          "show_title" : 1,
          "size" : "large",
          "type" : "countdown",
-         "updated_at" : "2026-10-30 11:42:37"
+         "updated_at" : "2026-11-01 01:49:19"
       },
       {
          "colour" : "white",
