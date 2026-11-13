@@ -10,7 +10,15 @@ cd "$(dirname "$0")" || exit 1
 E1_ADDRESS="E1.local"
 
 PORT=3000
-ADDRESS="${1:-$E1_ADDRESS}"
+ADDRESS="${1:-}"
+if [ -z "$ADDRESS" ]; then
+  # If ProPre2.0 is running on this same computer, show its output here instead of looking for E1 on the network
+  if curl -s -m 1 -o /dev/null "http://localhost:$PORT/api/live"; then
+    ADDRESS="localhost"
+  else
+    ADDRESS="$E1_ADDRESS"
+  fi
+fi
 BASE="http://$ADDRESS:$PORT"
 PROFILE="$HOME/propre-output-profile"
 
