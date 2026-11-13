@@ -3,7 +3,7 @@
 # Uses only what is already built into macOS (Perl and curl) - nothing to download or install.
 cd "$(dirname "$0")" || exit 1
 
-PORT=3000
+PORT="${PROPRE_PORT:-3000}"
 BASE="http://localhost:$PORT"
 # A profile of its own: Chrome hands a new launch to an already-running instance that uses the same profile,
 # and that instance ignores the window position, so the output must not share a profile with older windows.
@@ -105,6 +105,12 @@ else
     exit 1
   fi
   echo "ProPre2.0 started."
+fi
+
+# Keep an eye on the server: if the Mac sleeps or shuts down, ProPre2.0 stops by itself
+WATCH_PIDFILE="$PWD/.propre-watch.pid"
+if ! { [ -f "$WATCH_PIDFILE" ] && kill -0 "$(cat "$WATCH_PIDFILE")" 2>/dev/null; }; then
+  PROPRE_PORT="$PORT" nohup /bin/bash "$PWD/watch_propre.sh" >/dev/null 2>&1 </dev/null &
 fi
 
 open "$BASE/index.html"
