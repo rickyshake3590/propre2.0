@@ -82,15 +82,15 @@
       {
          "colour" : "yellow",
          "created_at" : "2026-10-22 13:53:55",
-         "duration_seconds" : 1200,
+         "duration_seconds" : 600,
          "id" : 32,
-         "name" : "ALTAR CALL",
+         "name" : "ALTARCALL",
          "position" : "middle-center",
          "show_current_time" : 1,
          "show_title" : 1,
          "size" : "large",
          "type" : "altar-call",
-         "updated_at" : "2026-10-22 13:53:55"
+         "updated_at" : "2026-11-13 14:00:06"
       },
       {
          "colour" : "white",
