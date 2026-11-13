@@ -11,16 +11,21 @@ PROFILE="$HOME/propre-output-profile-main"
 
 running() { curl -s -m 1 -o /dev/null "$BASE/api/live"; }
 
-# Prints "x y w h" for the first display that is not the main display, in the top-left-origin
-# coordinates Chrome uses for --window-position. Prints nothing if only one display is connected.
+# Prints "x y w h" for the first display that is not the built-in laptop screen, in the top-left-origin
+# coordinates Chrome uses for --window-position. Prints nothing if only the laptop screen is connected.
+# The main display (the one with the menu bar) can be the external monitor, so the laptop is found by name.
 extended_display() {
   osascript -l JavaScript -e '
     ObjC.import("AppKit");
     const screens = $.NSScreen.screens;
     const main = screens.objectAtIndex(0).frame;
     let out = "";
-    for (let i = 1; i < screens.count; i++) {
-      const f = screens.objectAtIndex(i).frame;
+    for (let i = 0; i < screens.count; i++) {
+      const screen = screens.objectAtIndex(i);
+      // CGDisplayIsBuiltin is true for the laptop screen whatever language macOS is set to
+      const id = ObjC.unwrap(screen.deviceDescription.objectForKey("NSScreenNumber"));
+      if ($.CGDisplayIsBuiltin(id)) continue;
+      const f = screen.frame;
       const x = Math.round(f.origin.x);
       const y = Math.round(main.size.height - (f.origin.y + f.size.height));
       out = [x, y, Math.round(f.size.width), Math.round(f.size.height)].join(" ");
@@ -45,7 +50,7 @@ open_output() {
           --window-position="$x,$y" --window-size="$w,$h" "$url" >/dev/null 2>&1 &
         # Wait for the output window itself (found by its address), then move it onto the extended display
         placed=""; err=""; errfile="$(mktemp)"
-        for i in $(seq 1 25); do
+        for i in $(seq 1 75); do
           placed="$(osascript -e "tell application \"$app\"
             repeat with win in windows
               if (URL of active tab of win) contains \"output.html\" then
@@ -64,6 +69,8 @@ open_output() {
           echo "Output opened in $app, but it could not be moved to the extended display."
           err="$(cat "$errfile" 2>/dev/null)"; rm -f "$errfile"
           [ -n "$err" ] && echo "  macOS said: $err"
+          echo "  Windows $app has open (their current addresses):"
+          osascript -e "tell application \"$app\" to get URL of active tab of windows" 2>&1 | sed 's/^/    /'
           echo "  Allow Terminal to control $app: System Settings > Privacy & Security > Automation."
         fi
       else
