@@ -7,16 +7,20 @@ PORT="${PROPRE_PORT:-3000}"
 BASE="http://localhost:$PORT"
 # A profile of its own: Chrome hands a new launch to an already-running instance that uses the same profile,
 # and that instance ignores the window position, so the output must not share a profile with older windows.
-PROFILE="$HOME/propre-output-profile-main"
+# Which screen the output window goes to. Leave it empty to use the first screen that is not the laptop screen.
+# To pick a screen by its name (run show_displays.command to see the names), type the name, e.g. "BMD HDMI".
+OUTPUT_DISPLAY=""
 
 running() { curl -s -m 1 -o /dev/null "$BASE/api/live"; }
 
-# Prints "x y w h" for the first display that is not the built-in laptop screen, in the top-left-origin
-# coordinates Chrome uses for --window-position. Prints nothing if only the laptop screen is connected.
-# The main display (the one with the menu bar) can be the external monitor, so the laptop is found by name.
+# Prints "x y w h" of the chosen screen, in the top-left-origin coordinates Chrome uses for --window-position.
+# With a name given, prints the screen with that name. Without one, prints the first screen that is not the
+# built-in laptop screen. Prints nothing if no such screen is connected.
+# The main display (the one with the menu bar) can be the external monitor, so the laptop is found by its flag.
 extended_display() {
-  osascript -l JavaScript -e '
+  PROPRE_OUTPUT_DISPLAY="$1" osascript -l JavaScript -e '
     ObjC.import("AppKit");
+    const want = ObjC.unwrap($.NSProcessInfo.processInfo.environment.objectForKey("PROPRE_OUTPUT_DISPLAY")) || "";
     const screens = $.NSScreen.screens;
     const main = screens.objectAtIndex(0).frame;
     let out = "";
@@ -24,7 +28,8 @@ extended_display() {
       const screen = screens.objectAtIndex(i);
       // CGDisplayIsBuiltin is true for the laptop screen whatever language macOS is set to
       const id = ObjC.unwrap(screen.deviceDescription.objectForKey("NSScreenNumber"));
-      if ($.CGDisplayIsBuiltin(id)) continue;
+      const name = ObjC.unwrap(screen.localizedName);
+      if (want ? name !== want : $.CGDisplayIsBuiltin(id)) continue;
       const f = screen.frame;
       const x = Math.round(f.origin.x);
       const y = Math.round(main.size.height - (f.origin.y + f.size.height));
@@ -39,8 +44,12 @@ extended_display() {
 # open on that display, filling it, instead of on the main screen.
 open_output() {
   local url="$1" app exe geom="" x y w h
-  geom="$(extended_display)"
-  echo "Extended display found: ${geom:-none (only the main screen is connected)}"
+  geom="$(extended_display "$OUTPUT_DISPLAY")"
+  if [ -n "$OUTPUT_DISPLAY" ] && [ -z "$geom" ]; then
+    echo "No screen named \"$OUTPUT_DISPLAY\" is connected. Using the first other screen instead."
+    geom="$(extended_display "")"
+  fi
+  echo "Output screen: ${geom:-none (only the built-in laptop screen is connected)}"
   for app in "Google Chrome" "Microsoft Edge" "Brave Browser"; do
     exe="/Applications/$app.app/Contents/MacOS/$app"
     if [ -x "$exe" ]; then
