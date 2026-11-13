@@ -292,6 +292,28 @@
   /* When the timer shown changes, only the text fades out and back in; the scene outline stays put */
   .live-stage .scene-inner, .live-stage .live-placeholder { transition: opacity 0.25s ease; }
   .live-stage.is-fading .scene-inner, .live-stage.is-fading .live-placeholder { opacity: 0; }
+  /* In-app dialog: covers the whole screen and is answered with its buttons (replaces the browser's confirm/alert) */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal-box {
+    width: min(520px, 100%);
+    background: var(--card-bg);
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    padding: 28px 30px 24px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  }
+  .modal-title { font-size: 18px; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; }
+  .modal-message { font-size: 17px; line-height: 1.5; color: var(--text); margin-bottom: 26px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+  .modal-actions .btn { padding: 12px 20px; font-size: 14px; }
+  .modal-actions .btn-danger { background: #b91c1c; color: #fff; }
+  .modal-actions .btn-danger:hover { background: #dc2626; }
+
   /* Right-click menu */
   #ctx-menu {
     position: fixed; z-index: 1000; display: none; min-width: 170px;
@@ -497,6 +519,15 @@
 
   <!-- Filled in by renderEditor() when a timer is selected -->
   <div class="timer-editor" id="timer-editor"></div>
+</div>
+
+<!-- In-app dialog (see showDialog) -->
+<div class="modal-backdrop" id="app-modal" style="display:none;" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title"></div>
+    <div class="modal-message" id="modal-message"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
 </div>
 
 <!-- Right-click menu for timer cards / rows -->
@@ -833,6 +864,78 @@ document.getElementById('add-blank-btn').addEventListener('click', async () => {
   }
 });
 
+// ---------- In-app dialogs (replace the browser's confirm and alert boxes) ----------
+// The dialog sits in the middle of the screen over a full-screen backdrop. Clicking the backdrop does nothing,
+// so it has to be answered with one of its buttons, Enter or Escape. Tab stays inside the dialog.
+let modalResolve = null;
+let modalCancelValue = false;
+
+function showDialog({ title, message, buttons }) {
+  return new Promise(resolve => {
+    modalResolve = resolve;
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-message').textContent = message;
+    const actions = document.getElementById('modal-actions');
+    actions.innerHTML = '';
+    buttons.forEach(b => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn ${b.className}`;
+      btn.textContent = b.label;
+      btn.addEventListener('click', () => closeDialog(b.value));
+      actions.appendChild(btn);
+    });
+    // Destructive dialogs start on Cancel so pressing Enter by accident does nothing harmful
+    const focusIndex = buttons.some(b => b.className === 'btn-danger') ? 0 : buttons.length - 1;
+    document.getElementById('app-modal').style.display = 'flex';
+    actions.children[focusIndex].focus(); // focus only works once the dialog is visible
+  });
+}
+
+function closeDialog(value) {
+  document.getElementById('app-modal').style.display = 'none';
+  const resolve = modalResolve;
+  modalResolve = null;
+  if (resolve) resolve(value);
+}
+
+// Resolves true if the user confirms, false if they cancel
+function askConfirm(message, { title = 'Are you sure?', confirmLabel = 'Confirm', danger = false } = {}) {
+  return showDialog({
+    title,
+    message,
+    buttons: [
+      { label: 'Cancel', className: 'btn-secondary', value: modalCancelValue },
+      { label: confirmLabel, className: danger ? 'btn-danger' : 'btn-primary', value: true }
+    ]
+  });
+}
+
+function showAlert(message) {
+  return showDialog({
+    title: 'Something went wrong',
+    message,
+    buttons: [{ label: 'OK', className: 'btn-primary', value: true }]
+  }).then(() => {});
+}
+
+document.addEventListener('keydown', e => {
+  if (!modalResolve) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeDialog(modalCancelValue);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (document.activeElement && document.activeElement.closest('#modal-actions')) document.activeElement.click();
+  } else if (e.key === 'Tab') {
+    // Keep focus on the dialog buttons
+    e.preventDefault();
+    const buttons = [...document.querySelectorAll('#modal-actions .btn')];
+    const i = buttons.indexOf(document.activeElement);
+    buttons[(i + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+  }
+});
+
 // ---------- Right-click menu + duplicate ----------
 let ctxId = null;
 const ctxMenu = document.getElementById('ctx-menu');
@@ -894,7 +997,7 @@ async function duplicateTimer(id) {
     addLog(created.name, 'DUPLICATED', `from ${t.name}`);
     renderAll();
   } catch (err) {
-    alert(err.message);
+    await showAlert(err.message);
   }
 }
 
@@ -962,9 +1065,9 @@ function stopTimer(id) {
 }
 
 // Resets to the original value without starting; the user presses play to start.
-function restartTimer(id) {
+async function restartTimer(id) {
   const timer = timers.find(t => t.id === id);
-  if (!timer || !confirm(`Reset timer "${timer.name}"?`)) return;
+  if (!timer || !(await askConfirm(`Reset "${timer.name}" to its original length? It will not start until you press play.`, { title: 'Reset timer', confirmLabel: 'Reset', danger: true }))) return;
   const r = runtime[id];
   r.elapsedBase = 0;
   r.startedClock = null;
@@ -977,7 +1080,7 @@ function restartTimer(id) {
 async function removeTimer(id) {
   const timer = timers.find(t => t.id === id);
   if (!timer) return;
-  if (!confirm(`Delete timer "${timer.name}"?`)) return;
+  if (!(await askConfirm(`Delete "${timer.name}"? This cannot be undone.`, { title: 'Delete timer', confirmLabel: 'Delete', danger: true }))) return;
   try {
     await deleteTimer(id);
     timers = timers.filter(t => t.id !== id);
@@ -986,7 +1089,7 @@ async function removeTimer(id) {
     addLog(timer.name, 'DELETED');
     renderAll();
   } catch (err) {
-    alert(err.message);
+    await showAlert(err.message);
   }
 }
 
@@ -1157,7 +1260,7 @@ async function commitName(id, fromBlur) {
     t.name = updated.name;
     addLog(t.name, 'RENAMED', `from ${oldName}`);
   } catch (err) {
-    alert(err.message);
+    await showAlert(err.message);
   }
   renderAll();
 }
@@ -1231,7 +1334,7 @@ async function commitEdit(id, fromBlur) {
 
   const r = runtime[id];
   editingId = null;
-  if (r && (r.isRunning || r.isPaused) && !confirm(`Change "${t.name}" to ${formatTime(secs)}? This resets the timer.`)) {
+  if (r && (r.isRunning || r.isPaused) && !(await askConfirm(`Change "${t.name}" to ${formatTime(secs)}? This resets the timer.`, { title: 'Change length', confirmLabel: 'Change', danger: true }))) {
     renderControlRows();
     return;
   }
@@ -1244,7 +1347,7 @@ async function commitEdit(id, fromBlur) {
     r.startedClock = null;
     addLog(t.name, 'EDITED', `Set to ${fmtDur(secs)}`);
   } catch (err) {
-    alert(err.message);
+    await showAlert(err.message);
   }
   renderAll();
 }
@@ -1412,7 +1515,7 @@ async function saveEdit(e) {
   // Changing the length or type restarts the timer, so confirm first if it is running or paused
   const restarts = payload.duration_seconds !== t.duration_seconds || type !== t.type;
   const r = runtime[t.id];
-  if (restarts && r && (r.isRunning || r.isPaused) && !confirm(`Save changes to "${t.name}"? This resets the timer.`)) return;
+  if (restarts && r && (r.isRunning || r.isPaused) && !(await askConfirm(`Save changes to "${t.name}"? This resets the timer.`, { title: 'Save changes', confirmLabel: 'Save', danger: true }))) return;
 
   try {
     const updated = await updateTimer(t.id, payload);
@@ -1587,7 +1690,7 @@ function paintLiveBox(shown) {
 // Clicking away from every timer takes the timer out of the live box; it keeps running in the controls.
 // Uses click (not mousedown) so an open name edit has already committed on blur.
 document.addEventListener('click', e => {
-  if (e.target.closest('.preview-card, .control-row, #live-output-box, #timer-editor, #ctx-menu')) return;
+  if (e.target.closest('.preview-card, .control-row, #live-output-box, #timer-editor, #ctx-menu, #app-modal')) return;
   if (!getShownTimer()) return;
   selectedId = null;
   liveCleared = true;

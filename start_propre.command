@@ -9,15 +9,45 @@ PROFILE="$HOME/propre-output-profile"
 
 running() { curl -s -m 1 -o /dev/null "$BASE/api/live"; }
 
+# Prints "x y w h" for the first display that is not the main display, in the top-left-origin
+# coordinates Chrome uses for --window-position. Prints nothing if only one display is connected.
+extended_display() {
+  osascript -l JavaScript -e '
+    ObjC.import("AppKit");
+    const screens = $.NSScreen.screens;
+    const main = screens.objectAtIndex(0).frame;
+    let out = "";
+    for (let i = 1; i < screens.count; i++) {
+      const f = screens.objectAtIndex(i).frame;
+      const x = Math.round(f.origin.x);
+      const y = Math.round(main.size.height - (f.origin.y + f.size.height));
+      out = [x, y, Math.round(f.size.width), Math.round(f.size.height)].join(" ");
+      break;
+    }
+    out;' 2>/dev/null
+}
+
 # Opens the output screen fullscreen in a browser that supports kiosk mode (Chrome, Edge, Brave, Firefox),
-# otherwise in Safari fullscreen.
+# otherwise in Safari fullscreen. If an extended display is connected, the Chromium-based browsers
+# open on that display, filling it, instead of on the main screen.
 open_output() {
-  local url="$1" app exe
+  local url="$1" app exe geom="" x y w h
+  geom="$(extended_display)"
   for app in "Google Chrome" "Microsoft Edge" "Brave Browser"; do
     exe="/Applications/$app.app/Contents/MacOS/$app"
     if [ -x "$exe" ]; then
-      nohup "$exe" --kiosk --user-data-dir="$PROFILE" --no-first-run "$url" >/dev/null 2>&1 &
-      echo "Output opened fullscreen in $app."
+      if [ -n "$geom" ]; then
+        read -r x y w h <<< "$geom"
+        nohup "$exe" --kiosk --user-data-dir="$PROFILE" --no-first-run \
+          --window-position="$x,$y" --window-size="$w,$h" "$url" >/dev/null 2>&1 &
+        # Setting the bounds through AppleScript makes sure the window covers the extended display
+        sleep 2
+        osascript -e "tell application \"$app\" to set bounds of front window to {$x, $y, $((x + w)), $((y + h))}" >/dev/null 2>&1
+        echo "Output opened fullscreen in $app on the extended display."
+      else
+        nohup "$exe" --kiosk --user-data-dir="$PROFILE" --no-first-run "$url" >/dev/null 2>&1 &
+        echo "Output opened fullscreen in $app."
+      fi
       return 0
     fi
   done
