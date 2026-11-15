@@ -9,7 +9,7 @@ BASE="http://localhost:$PORT"
 # and that instance ignores the window position, so the output must not share a profile with older windows.
 # Which screen the output window goes to. Leave it empty to use the first screen that is not the laptop screen.
 # To pick a screen by its name (run show_displays.command to see the names), type the name, e.g. "BMD HDMI".
-OUTPUT_DISPLAY=""
+OUTPUT_DISPLAY="BMD HDMI"
 
 running() { curl -s -m 1 -o /dev/null "$BASE/api/live"; }
 
