@@ -21,5 +21,6 @@ else
   kill $PIDS
   echo "ProPre2.0 stopped."
 fi
-pkill -f propre-output-profile 2>/dev/null
+# Output windows use a profile named propre-output.XXXX (or the older propre-output-profile)
+pkill -f propre-output 2>/dev/null
 exit 0
