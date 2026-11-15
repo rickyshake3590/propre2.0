@@ -58,34 +58,35 @@ open_output() {
         # Close an output window left from an earlier run, so the new one is the only output window
         osascript -e "if application \"$app\" is running then tell application \"$app\" to close (every window whose URL of active tab contains \"output.html\")" >/dev/null 2>&1
         sleep 1
-        # A new profile for every launch: Chrome hands a launch to a running instance that uses the same profile,
-        # and that instance keeps its old window position, so the output would stay on the wrong screen
+        # A new profile for every launch, so Chrome never hands this launch to an older window
         PROFILE="$(mktemp -d "${TMPDIR:-/tmp}/propre-output.XXXXXX")"
-        nohup "$exe" --kiosk --user-data-dir="$PROFILE" --no-first-run \
-          --window-position="$x,$y" --window-size="$w,$h" "$url" >/dev/null 2>&1 &
-        # Wait for the output window itself (found by its address), then move it onto the extended display
-        placed=""; err=""; errfile="$(mktemp)"
+        # Kiosk mode is not used: Chrome moves a kiosk window to the main screen and ignores the position,
+        # and a full-screen window cannot be moved afterwards. A plain app window can be placed exactly.
+        nohup "$exe" --app="$url" --user-data-dir="$PROFILE" --no-first-run >/dev/null 2>&1 &
+        # Place the output window by its address, then read its position back to check it is on the chosen screen
+        got=""; bx=""; by=""; br=""; bb=""
         for i in $(seq 1 75); do
-          placed="$(osascript -e "tell application \"$app\"
+          got="$(osascript -e "tell application \"$app\"
             repeat with win in windows
               if (URL of active tab of win) contains \"output.html\" then
                 set bounds of win to {$x, $y, $((x + w)), $((y + h))}
-                return \"placed\"
+                set b to bounds of win
+                return (item 1 of b as text) & \", \" & (item 2 of b as text) & \", \" & (item 3 of b as text) & \", \" & (item 4 of b as text)
               end if
             end repeat
-            return \"waiting\"
-          end tell" 2>"$errfile")"
-          [ "$placed" = "placed" ] && break
+            return \"none\"
+          end tell" 2>/dev/null)"
+          if [ "$got" != "none" ] && [ -n "$got" ]; then
+            IFS=', ' read -r bx by br bb <<< "$got"
+            if [ "$bx" -ge "$x" ] && [ "$bx" -lt $((x + w)) ]; then break; fi
+          fi
           sleep 0.4
         done
-        if [ "$placed" = "placed" ]; then
-          echo "Output opened in $app on the extended display."
+        if [ -n "$bx" ] && [ "$bx" -ge "$x" ] && [ "$bx" -lt $((x + w)) ]; then
+          echo "Output opened in $app on the chosen screen (window at x=$bx, y=$by, right $br, bottom $bb)."
         else
-          echo "Output opened in $app, but it could not be moved to the extended display."
-          err="$(cat "$errfile" 2>/dev/null)"; rm -f "$errfile"
-          [ -n "$err" ] && echo "  macOS said: $err"
-          echo "  Windows $app has open (their current addresses):"
-          osascript -e "tell application \"$app\" to get URL of active tab of windows" 2>&1 | sed 's/^/    /'
+          echo "Output opened in $app, but it is not on the chosen screen. Window reported at: ${got:-no window found}"
+          echo "  Chosen screen: x=$x, y=$y, size $w x $h"
           echo "  Allow Terminal to control $app: System Settings > Privacy & Security > Automation."
         fi
       else
